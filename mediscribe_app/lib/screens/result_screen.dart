@@ -1,99 +1,117 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
-import 'package:mediscribe_app/core/color.dart';
-import '../core/text_styles.dart';
+import '../core/color.dart';
 import '../widgets/primary_button.dart';
+import '../services/pdf_service.dart';
 
 class ResultScreen extends StatelessWidget {
-  final String extractedText;
+  final String text;
 
-  const ResultScreen({
-    super.key,
-    required this.extractedText,
-  });
+  const ResultScreen({super.key, required this.text});
+
+  // 🔹 Very simple medicine highlighting heuristic
+  List<TextSpan> _highlightMedicines(String input) {
+    final medicineKeywords = [
+      'tablet',
+      'tab',
+      'capsule',
+      'cap',
+      'syrup',
+      'mg',
+      'ml'
+    ];
+
+    final words = input.split(' ');
+    return words.map((word) {
+      final lower = word.toLowerCase();
+
+      final isMedicine = medicineKeywords.any(lower.contains);
+
+      return TextSpan(
+        text: '$word ',
+        style: TextStyle(
+          fontSize: 15,
+          color: isMedicine ? Colors.blueAccent : AppColors.textPrimary,
+          fontWeight: isMedicine ? FontWeight.w600 : FontWeight.normal,
+        ),
+      );
+    }).toList();
+  }
+
+  Future<void> _exportPdf(BuildContext context) async {
+    final File file = await PdfService.generatePrescriptionPdf(text);
+    Share.shareXFiles([XFile(file.path)], text: 'Prescription Report');
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: AppColors.primary),
-        title: const Text(
-          'Extracted Text',
-          style: TextStyle(
-            color: AppColors.primary,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        title: const Text('Prescription Result'),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Prescription Details',
-              style: AppTextStyles.sectionTitle,
+            // 🩺 Header
+            Row(
+              children: const [
+                Icon(Icons.medical_services,
+                    color: AppColors.primary, size: 28),
+                SizedBox(width: 8),
+                Text(
+                  'Extracted Medical Data',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
 
-            // RESULT CARD
+            const SizedBox(height: 16),
+
+            // 📋 Result Card
             Expanded(
               child: Container(
+                width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.border),
-                  borderRadius: BorderRadius.circular(12),
                   color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
                 ),
                 child: SingleChildScrollView(
-                  child: TextFormField(
-                    initialValue: extractedText,
-                    maxLines: null,
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                    ),
-                    style: const TextStyle(
-                      fontSize: 15,
-                      height: 1.5,
+                  child: RichText(
+                    text: TextSpan(
+                      children: _highlightMedicines(text),
                     ),
                   ),
                 ),
               ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
 
-            // ACTION BUTTONS
+            // 🔘 Actions
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.copy),
-                    label: const Text('Copy'),
-                    onPressed: () {
-                      Clipboard.setData(
-                        ClipboardData(text: extractedText),
-                      );
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Text copied to clipboard'),
-                        ),
-                      );
-                    },
+                  child: PrimaryButton(
+                    text: 'Export PDF',
+                    onPressed: () => _exportPdf(context),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: PrimaryButton(
-                    text: 'Done',
+                    text: 'Share',
                     onPressed: () {
-                      Navigator.popUntil(
-                        context,
-                        (route) => route.isFirst,
-                      );
+                      Share.share(text);
                     },
                   ),
                 ),

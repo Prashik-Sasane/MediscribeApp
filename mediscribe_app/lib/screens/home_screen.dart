@@ -11,6 +11,7 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
         elevation: 0,
@@ -48,30 +49,39 @@ class HomeScreen extends StatelessWidget {
         ],
       ),
 
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 30),
+            const SizedBox(height: 24),
 
-            // HERO TITLE
-            const Text(
-              'AI-powered solution for effortless\nprescription documentation',
-              style: AppTextStyles.heroTitle,
+            // 🔷 HERO CARD
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text(
+                    'AI-powered solution for effortless\nprescription documentation',
+                    style: AppTextStyles.heroTitle,
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    'Upload medical prescriptions and instantly convert them into readable digital text using AI.',
+                    style: AppTextStyles.subtitle,
+                  ),
+                ],
+              ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 32),
 
-            // SUBTITLE
-            const Text(
-              'Upload medical prescriptions and instantly convert them into readable digital text using AI.',
-              style: AppTextStyles.subtitle,
-            ),
-
-            const SizedBox(height: 40),
-
-            // CTA BUTTON
+            // 🚀 CTA BUTTON
             PrimaryButton(
               text: 'Upload Prescription',
               onPressed: () {
@@ -84,9 +94,9 @@ class HomeScreen extends StatelessWidget {
               },
             ),
 
-            const SizedBox(height: 40),
+            const SizedBox(height: 36),
 
-            // FEATURES
+            // ⭐ FEATURES TITLE
             const Text(
               'Why Mediscribe?',
               style: AppTextStyles.sectionTitle,
@@ -94,27 +104,41 @@ class HomeScreen extends StatelessWidget {
 
             const SizedBox(height: 16),
 
-            _featureItem('📸', 'Easy prescription upload'),
-            _featureItem('⚡', 'Fast AI-powered processing'),
-            _featureItem('🩺', 'Designed for medical use'),
+            _featureItem(Icons.camera_alt_outlined, 'Easy prescription upload'),
+            _featureItem(Icons.flash_on_outlined, 'Fast AI-powered processing'),
+            _featureItem(Icons.medical_services_outlined, 'Designed for medical use'),
           ],
         ),
       ),
     );
   }
 
-  Widget _featureItem(String icon, String text) {
+  Widget _featureItem(IconData icon, String text) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
-          Text(icon, style: const TextStyle(fontSize: 20)),
-          const SizedBox(width: 12),
-          Text(
-            text,
-            style: const TextStyle(
-              fontSize: 15,
-              color: AppColors.textSecondary,
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              icon,
+              size: 20,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 15,
+                color: AppColors.textSecondary,
+              ),
             ),
           ),
         ],

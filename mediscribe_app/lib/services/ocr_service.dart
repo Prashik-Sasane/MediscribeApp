@@ -4,14 +4,12 @@ import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart
 class OcrService {
   static Future<String> extractText(File image) async {
     final inputImage = InputImage.fromFile(image);
-    final textRecognizer =
+    final recognizer =
         TextRecognizer(script: TextRecognitionScript.latin);
 
-    final RecognizedText recognizedText =
-        await textRecognizer.processImage(inputImage);
+    final result = await recognizer.processImage(inputImage);
+    await recognizer.close();
 
-    await textRecognizer.close();
-
-    return recognizedText.text.trim();
+    return result.text.trim();
   }
 }

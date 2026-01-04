@@ -1,10 +1,12 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
 
-import 'package:mediscribe_app/core/color.dart';
-import '../core/text_styles.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:path_provider/path_provider.dart';
+
+import '../core/color.dart';
 import '../widgets/primary_button.dart';
-import '../utils/image_picker.dart';
 import 'processing_screen.dart';
 
 class UploadScreen extends StatefulWidget {
@@ -16,105 +18,115 @@ class UploadScreen extends StatefulWidget {
 
 class _UploadScreenState extends State<UploadScreen> {
   File? _selectedImage;
+  bool _loadingImage = false;
+
+  Future<void> _pickImage(ImageSource source) async {
+    setState(() => _loadingImage = true);
+
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(source: source);
+
+      if (picked == null) {
+        setState(() => _loadingImage = false);
+        return;
+      }
+
+      File finalImage = File(picked.path);
+
+      // 🔹 Try compression (optional, safe)
+      try {
+        final tempDir = await getTemporaryDirectory();
+        final targetPath =
+            '${tempDir.path}/${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+        final compressed = await FlutterImageCompress.compressAndGetFile(
+          picked.path,
+          targetPath,
+          quality: 75,
+          format: CompressFormat.jpeg,
+        );
+
+        if (compressed != null) {
+          finalImage = File(compressed.path);
+        }
+      } catch (_) {
+        // Compression failed → fallback to original image
+      }
+
+      setState(() => _selectedImage = finalImage);
+    } finally {
+      setState(() => _loadingImage = false);
+    }
+  }
+
+  void _processPrescription() {
+    if (_selectedImage == null) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProcessingScreen(image: _selectedImage!),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: AppColors.primary),
-        title: const Text(
-          'Upload Prescription',
-          style: TextStyle(
-            color: AppColors.primary,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        title: const Text('Upload Prescription'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Upload a prescription image',
-              style: AppTextStyles.sectionTitle,
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Make sure the image is clear and readable for accurate results.',
-              style: AppTextStyles.subtitle,
-            ),
-            const SizedBox(height: 24),
-
-            // IMAGE PREVIEW
+            // 📸 Image Preview Card
             Container(
               height: 220,
               width: double.infinity,
               decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: AppColors.border),
-                borderRadius: BorderRadius.circular(12),
-                color: Colors.grey.shade50,
               ),
-              child: _selectedImage == null
-                  ? Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Icon(
-                          Icons.image_outlined,
-                          size: 60,
-                          color: AppColors.textSecondary,
-                        ),
-                        SizedBox(height: 12),
-                        Text(
-                          'No image selected',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
+              child: _loadingImage
+                  ? const Center(child: CircularProgressIndicator())
+                  : _selectedImage == null
+                      ? const Center(
+                          child: Text(
+                            'No image selected',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        )
+                      : ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: Image.file(
+                            _selectedImage!,
+                            fit: BoxFit.cover,
                           ),
                         ),
-                      ],
-                    )
-                  : ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.file(
-                        _selectedImage!,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                      ),
-                    ),
             ),
 
             const SizedBox(height: 24),
 
-            // PICK IMAGE BUTTONS
+            // 📷 Camera / Gallery buttons
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.photo_library_outlined),
-                    label: const Text('Gallery'),
-                    onPressed: () async {
-                      final image =
-                          await ImagePickerHelper.pickFromGallery();
-                      if (image != null) {
-                        setState(() => _selectedImage = image);
-                      }
-                    },
+                  child: PrimaryButton(
+                    text: 'Camera',
+                    onPressed: () => _pickImage(ImageSource.camera),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.camera_alt_outlined),
-                    label: const Text('Camera'),
-                    onPressed: () async {
-                      final image =
-                          await ImagePickerHelper.pickFromCamera();
-                      if (image != null) {
-                        setState(() => _selectedImage = image);
-                      }
-                    },
+                  child: PrimaryButton(
+                    text: 'Gallery',
+                    onPressed: () => _pickImage(ImageSource.gallery),
                   ),
                 ),
               ],
@@ -122,20 +134,12 @@ class _UploadScreenState extends State<UploadScreen> {
 
             const Spacer(),
 
-            // PROCESS BUTTON
+            // ▶ Process button (bottom)
             PrimaryButton(
               text: 'Process Prescription',
+              onPressed:
+                  _selectedImage != null ? _processPrescription : () {},
               isDisabled: _selectedImage == null,
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ProcessingScreen(
-                      image: _selectedImage!,
-                    ),
-                  ),
-                );
-              },
             ),
           ],
         ),

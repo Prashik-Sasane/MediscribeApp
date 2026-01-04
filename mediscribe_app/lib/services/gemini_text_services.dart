@@ -1,53 +1,61 @@
 import 'dart:convert';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-class GeminiTextService {
-  static final String _apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+class GeminiService {
+  static Future<String?> understandPrescription(String ocrText) async {
+    try {
+      final apiKey = dotenv.env['GEMINI_API_KEY'];
+      if (apiKey == null || apiKey.isEmpty) return null;
 
-  static Future<String> cleanPrescriptionText(String rawText) async {
-    if (_apiKey.isEmpty) {
-      throw Exception('GEMINI_API_KEY not loaded');
-    }
+      final url = Uri.parse(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key=$apiKey',
+      );
 
-    final uri = Uri.parse(
-      'https://generativelanguage.googleapis.com/v1beta/models/'
-      'gemini-3-pro-preview:generateContent',
-    );
+      final prompt = '''
+You are a medical assistant.
 
-    final body = {
-      "contents": [
-        {
-          "parts": [
+From the prescription text below:
+1. Extract medicine names ONLY
+2. Extract dosage, frequency, and instructions
+3. Return output in this format:
+
+MEDICINES:
+- Medicine 1
+- Medicine 2
+
+DETAILS:
+<remaining information>
+
+Do NOT add explanations.
+Do NOT add non-medical content.
+
+Prescription text:
+$ocrText
+''';
+
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "contents": [
             {
-              "text":
-                  "You are a medical assistant. Clean and format the following "
-                  "prescription text into a clear, readable format. Preserve "
-                  "medicine names, dosage, frequency, and instructions.\n\n"
-                  "$rawText"
+              "parts": [
+                {"text": prompt}
+              ]
             }
           ]
-        }
-      ]
-    };
+        }),
+      );
 
-    final response = await http.post(
-      uri,
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": _apiKey,
-      },
-      body: jsonEncode(body),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception('Gemini text formatting failed');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['candidates']?[0]?['content']?['parts']?[0]?['text'];
+      } else {
+        return null;
+      }
+    } catch (_) {
+      return null;
     }
-
-    final decoded = jsonDecode(response.body);
-
-    return decoded['candidates'][0]['content']['parts'][0]['text']
-        .toString()
-        .trim();
   }
 }
