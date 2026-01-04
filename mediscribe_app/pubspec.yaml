@@ -1,0 +1,40 @@
+name: mediscribe_app
+description: "AI-powered medical prescription digitization app"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # 🔐 Environment variables (Gemini API key)
+  flutter_dotenv: ^5.1.0
+
+  # 📸 Image selection (gallery / camera)
+  image_picker: ^1.0.4
+
+  # 🧠 On-device OCR (Google ML Kit) — ANDROID ONLY
+  google_mlkit_text_recognition: ^0.13.0
+
+  # 🌐 HTTP requests (Gemini TEXT API)
+  http: ^1.2.0
+
+  # 🍎 Cupertino icons (standard Flutter dependency)
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  # 🔑 Environment file (DO NOT COMMIT)
+  assets:
+    - assets/.env
