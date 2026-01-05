@@ -1,84 +1,210 @@
-# MediscribeApp
+#  MediscribeApp
 
-Mediscribe is an AI-powered Flutter application that converts images of handwritten or printed medical prescriptions into readable, structured text. It uses on-device OCR (Google ML Kit) to extract text from images and the Google Generative Language (Gemini) API to extract medicine names, dosages, and instructions.
+**Mediscribe** is an AI-powered Flutter application that converts images of handwritten or printed medical prescriptions into readable, structured medical text.
 
----
-
-## 🚀 Key features
-- Upload prescription images from Camera or Gallery (with optional compression)
-- On-device OCR using `google_mlkit_text_recognition` (`OcrService`)
-- Structured extraction using Google Gemini (`GeminiService`) with a focused prompt
-- Medicine highlighting heuristic (`MedicineHighlighter` / UI highlighting)
-- Export results to PDF (`PdfService`) and share via system share sheet
+The app uses on-device OCR (Google ML Kit) to extract raw text from prescription images and the Google Generative Language (Gemini) API to intelligently extract medicine names, dosages, and instructions.
 
 ---
 
-## 📁 Repository layout (important places)
-- `mediscribe_app/` — main Flutter app
-  - `lib/main.dart` — app initialization (loads `assets/.env`)
-  - `lib/screens/` — UI screens (`login_screen`, `home_screen`, `upload_screen`, `processing_screen`, `result_screen`)
-  - `lib/services/` — `ocr_service.dart`, `gemini_text_services.dart`, `pdf_service.dart`
-  - `lib/utils/` — `medicine_highlighter.dart`
-  - `test/` — widget/unit tests (see `widget_test.dart`)
-- `.github/copilot-instructions.md` — guidance for AI coding agents
+## Key Features
+
+-  Upload prescription images from Camera or Gallery
+-  Optional image compression for faster processing
+-  On-device OCR using `google_mlkit_text_recognition`
+-  AI-powered structuring via Google Gemini API
+-  Medicine highlighting heuristic in the result UI
+-  Export extracted data as PDF
+-  Share results using the system share sheet
 
 ---
 
-## ▶️ Quick start (developer)
-Prerequisites: Flutter SDK, Android SDK (and Xcode for iOS builds on macOS).
+##  Repository Structure
 
-From the project root run:
+```
+mediscribe_app/
+│
+├── lib/
+│   ├── main.dart                 # App entry point (loads .env)
+│   ├── screens/
+│   │   ├── login_screen.dart
+│   │   ├── home_screen.dart
+│   │   ├── upload_screen.dart
+│   │   ├── processing_screen.dart
+│   │   └── result_screen.dart
+│   │
+│   ├── services/
+│   │   ├── ocr_service.dart       # ML Kit OCR logic
+│   │   ├── gemini_text_services.dart
+│   │   └── pdf_service.dart
+│   │
+│   ├── utils/
+│   │   └── medicine_highlighter.dart
+│   │
+│   └── widgets/
+│       └── primary_button.dart
+│
+├── test/
+│   └── widget_test.dart
+│
+├── assets/
+│   └── .env.example
+│
+└── .github/
+    └── copilot-instructions.md
+```
+
+---
+
+##  Application Flow
+
+1. App Launch
+2. Home / Welcome Screen
+3. Prescription Upload (Camera or Gallery)
+4. OCR Processing (on-device using ML Kit)
+5. AI Structuring (Gemini API extracts structured medical data)
+6. Result Screen (Clean output, medicine highlighting)
+7. Export / Share (PDF or system share)
+
+---
+
+##  AI / ML Pipeline
+
+Prescription Image
+        ↓
+Google ML Kit OCR (On-device)
+        ↓
+Raw OCR Text
+        ↓
+Gemini API (Text Understanding)
+        ↓
+Structured Medical Data
+        ↓
+UI Table + PDF + Share
+
+---
+
+##  OCR (Google ML Kit)
+
+- Runs completely on-device
+- No internet required
+- Fast and privacy-friendly
+- Extracts raw text only
+
+##  Gemini API (Text Only)
+
+- Used only for text understanding (no image processing via Gemini)
+- Extracts:
+  - Medicine names
+  - Dosage
+  - Frequency
+  - Instructions
+- Safe fallback to raw OCR if Gemini fails
+
+---
+
+##  Tech Stack
+
+**Frontend:** Flutter, Dart, Material Design
+
+**OCR:** Google ML Kit — Text Recognition (on-device)
+
+**AI / LLM:** Google Gemini API (text-only usage)
+
+**Utilities:** image_picker, flutter_image_compress, flutter_dotenv, pdf, path_provider, share_plus
+
+**Backend:** None (client-only, demo-friendly)
+
+---
+
+##  Quick Start (Developers)
+
+**Prerequisites**
+
+- Flutter SDK
+- Android SDK
+- Physical device or emulator
+
+**Run Locally**
 
 ```bash
 cd mediscribe_app
 flutter pub get
-flutter run            # runs on connected device or emulator
-flutter test           # run unit/widget tests
-flutter analyze        # static analysis
-dart format .          # code formatting
+flutter run
 ```
 
-Builds:
-- Android: `flutter build apk`
-- iOS: `flutter build ipa` (macOS only)
+**Testing & Analysis**
+
+```bash
+flutter test
+flutter analyze
+dart format .
+```
+
+---
+
+##  Build Commands
+
+- Android APK: `flutter build apk`
+- Android Release APK: `flutter build apk --release`
+- iOS (macOS only): `flutter build ipa`
 - Web: `flutter build web`
-- Desktop: `flutter build <windows|linux|macos>`
 
 ---
 
-## 🔐 Environment & secrets
-- The app uses `flutter_dotenv` and expects `GEMINI_API_KEY` to be available in `assets/.env` (loaded in `lib/main.dart`).
-- **Important:** `assets/.env` must NOT contain real API keys in a public repository. If keys are currently committed, rotate them immediately and replace `assets/.env` content with placeholders.
-- Recommended: Add `assets/.env` to `.gitignore` and commit `assets/.env.example` containing:
+##  Environment Variables & Secrets
 
-```env
-GEMINI_API_KEY=YOUR_API_KEY_HERE
-```
+The app uses `flutter_dotenv`.
 
-In CI, inject the secret into the environment and write `assets/.env` at workflow time before building.
+**Required Variable**
 
----
+`GEMINI_API_KEY=YOUR_API_KEY_HERE`
 
-## 🧪 Testing & CI
-- Tests live in `mediscribe_app/test/`. Use `flutter test` to run them.
-- No CI workflows are present; recommended GH Actions steps:
-  - Run `flutter pub get`
-  - Run `flutter analyze`
-  - Run `flutter test`
-  - Check formatting via `dart format --set-exit-if-changed .`
+**Setup**
+
+- Create `assets/.env`
+- Add your Gemini API key
+- Ensure `.env` is NOT committed
+
+**Recommended**
+
+- Add `assets/.env` to `.gitignore`
+- Commit `assets/.env.example` instead
 
 ---
 
-## 📝 Notes for contributors
-- OCR is on-device and supports Latin script; image quality impacts accuracy (handwriting may be poorly recognized).
-- Gemini is used only for extracting and formatting medicine details — the app falls back to raw OCR text if Gemini fails.
-- Medicine highlighting is currently a simple keyword heuristic — consider improving via a dedicated NER or stronger prompt parsing.
+##  Testing Notes
+
+- Tests are located in `test/`
+- `widget_test.dart` verifies UI integrity
+- Gemini calls should be mocked in future tests
+- OCR accuracy depends on image clarity
 
 ---
 
-If you'd like, I can:
-- Add an `assets/.env.example` and remove sensitive keys from `assets/.env` for you
-- Add a GitHub Actions workflow that injects `GEMINI_API_KEY` from repo secrets and runs tests
-- Add a sample test mocking `GeminiService` and verifying fallback behavior
+##  Notes for Contributors
 
-Tell me which change you want next and I’ll implement it.
+- OCR works best with clear, well-lit images
+- Handwritten prescriptions may vary in accuracy
+- Gemini is restricted to medical text formatting only
+- No diagnosis or medical advice is provided
+- Medicine highlighting uses a simple heuristic (can be improved)
+
+---
+
+##  Disclaimer
+
+Mediscribe is not a medical diagnostic tool. It assists in digitizing prescriptions and does not replace professional medical advice.
+
+---
+
+##  Contributions & Next Steps
+
+If you’d like, we can next:
+
+-  Add GitHub Actions CI
+-  Add mocked Gemini tests
+-  Add README screenshots
+-  Add architecture diagram
+-  Create hackathon demo script
+
+---
