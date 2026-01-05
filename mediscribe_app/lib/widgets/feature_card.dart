@@ -20,9 +20,9 @@ class FeatureCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2)),
         borderRadius: BorderRadius.circular(12),
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -30,12 +30,12 @@ class FeatureCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
               icon,
-              color: AppColors.primary,
+              color: Theme.of(context).colorScheme.primary,
               size: 22,
             ),
           ),
@@ -46,12 +46,12 @@ class FeatureCard extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: AppTextStyles.sectionTitle,
+                  style: AppTextStyles.sectionTitle(context),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   description,
-                  style: AppTextStyles.subtitle,
+                  style: AppTextStyles.subtitle(context),
                 ),
               ],
             ),

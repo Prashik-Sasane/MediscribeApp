@@ -33,7 +33,7 @@ class ResultScreen extends StatelessWidget {
         text: '$word ',
         style: TextStyle(
           fontSize: 15,
-          color: isMedicine ? Colors.blueAccent : AppColors.textPrimary,
+          color: isMedicine ? Colors.blueAccent : null,
           fontWeight: isMedicine ? FontWeight.w600 : FontWeight.normal,
         ),
       );
@@ -48,7 +48,7 @@ class ResultScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Prescription Result'),
       ),
@@ -58,16 +58,16 @@ class ResultScreen extends StatelessWidget {
           children: [
             // 🩺 Header
             Row(
-              children: const [
+              children: [
                 Icon(Icons.medical_services,
-                    color: AppColors.primary, size: 28),
-                SizedBox(width: 8),
+                    color: Theme.of(context).colorScheme.primary, size: 28),
+                const SizedBox(width: 8),
                 Text(
                   'Extracted Medical Data',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
               ],
@@ -81,9 +81,9 @@ class ResultScreen extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.border),
+                  border: Border.all(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2)),
                 ),
                 child: SingleChildScrollView(
                   child: RichText(

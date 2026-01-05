@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:mediscribe_app/core/color.dart';
 
 class AppTextStyles {
-  static const TextStyle heroTitle = TextStyle(
+  // Use Theme.of(context) colors for dynamic theme support
+  static TextStyle heroTitle(BuildContext context) => TextStyle(
     fontSize: 28,
     fontWeight: FontWeight.bold,
-    color: AppColors.textPrimary,
+    color: Theme.of(context).colorScheme.onSurface,
     height: 1.3,
   );
 
-  static const TextStyle subtitle = TextStyle(
+  static TextStyle subtitle(BuildContext context) => TextStyle(
     fontSize: 16,
-    color: AppColors.textSecondary,
+    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
     height: 1.5,
   );
 
@@ -21,9 +21,26 @@ class AppTextStyles {
     color: Colors.white,
   );
 
-  static const TextStyle sectionTitle = TextStyle(
+  static TextStyle sectionTitle(BuildContext context) => TextStyle(
     fontSize: 18,
     fontWeight: FontWeight.w600,
-    color: AppColors.textPrimary,
+    color: Theme.of(context).colorScheme.onSurface,
+  );
+
+  // Legacy static styles (kept for backward compatibility)
+  static const TextStyle heroTitleStatic = TextStyle(
+    fontSize: 28,
+    fontWeight: FontWeight.bold,
+    height: 1.3,
+  );
+
+  static const TextStyle subtitleStatic = TextStyle(
+    fontSize: 16,
+    height: 1.5,
+  );
+
+  static const TextStyle sectionTitleStatic = TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.w600,
   );
 }

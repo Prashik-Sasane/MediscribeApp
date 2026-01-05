@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'screens/login_screen.dart';
-import 'package:mediscribe_app/core/color.dart';
+import 'package:mediscribe_app/core/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,10 +18,9 @@ class MediscribeApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Mediscribe',
-      theme: ThemeData(
-        scaffoldBackgroundColor: AppColors.background,
-        useMaterial3: true,
-      ),
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.system, // Automatically switch based on system settings
       home: const LoginScreen(), // ✅ LOGIN FIRST
     );
   }

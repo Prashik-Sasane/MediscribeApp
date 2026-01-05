@@ -11,14 +11,14 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         elevation: 0,
-        title: const Text(
+        title: Text(
           'Mediscribe',
           style: TextStyle(
-            color: AppColors.primary,
+            color: Theme.of(context).colorScheme.primary,
             fontWeight: FontWeight.bold,
             fontSize: 22,
           ),
@@ -60,20 +60,20 @@ class HomeScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.05),
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text(
                     'AI-powered solution for effortless\nprescription documentation',
-                    style: AppTextStyles.heroTitle,
+                    style: AppTextStyles.heroTitle(context),
                   ),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   Text(
                     'Upload medical prescriptions and instantly convert them into readable digital text using AI.',
-                    style: AppTextStyles.subtitle,
+                    style: AppTextStyles.subtitle(context),
                   ),
                 ],
               ),
@@ -97,9 +97,9 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 36),
 
             // ⭐ FEATURES TITLE
-            const Text(
+            Text(
               'Why Mediscribe?',
-              style: AppTextStyles.sectionTitle,
+              style: AppTextStyles.sectionTitle(context),
             ),
 
             const SizedBox(height: 16),
@@ -114,35 +114,39 @@ class HomeScreen extends StatelessWidget {
   }
 
   Widget _featureItem(IconData icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              icon,
-              size: 20,
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                fontSize: 15,
-                color: AppColors.textSecondary,
+    return Builder(
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  icon,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
               ),
-            ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  text,
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
