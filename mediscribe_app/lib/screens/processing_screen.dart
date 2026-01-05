@@ -28,12 +28,19 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
   Future<void> _startPipeline() async {
     // STEP 1 — OCR (ML Kit)
     setState(() => _progress = 0.25);
+
     final ocrText = await OcrService.extractText(widget.image);
+
+    // Fallback safety
+    final safeOcrText = ocrText.trim().isEmpty
+        ? 'No readable text found in prescription.'
+        : ocrText;
 
     // STEP 2 — Gemini (TEXT UNDERSTANDING ONLY)
     setState(() => _progress = 0.65);
+
     final geminiText =
-        await GeminiService.understandPrescription(ocrText);
+        await GeminiService.understandPrescription(safeOcrText);
 
     // STEP 3 — Finish
     setState(() {
@@ -49,7 +56,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => ResultScreen(
-          text: geminiText ?? ocrText, // ✅ FIXED
+          text: geminiText ?? safeOcrText,
         ),
       ),
     );
