@@ -58,7 +58,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -72,11 +72,11 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                       size: 72,
                       color: Colors.green,
                     )
-                  : const Icon(
+                  : Icon(
                       Icons.health_and_safety_rounded,
-                      key: ValueKey('loading'),
+                      key: const ValueKey('loading'),
                       size: 72,
-                      color: AppColors.primary,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
             ),
 

@@ -9,7 +9,7 @@ class LoginScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -19,31 +19,31 @@ class LoginScreen extends StatelessWidget {
               const SizedBox(height: 40),
 
               // 👋 Welcome Text
-              const Text(
+              Text(
                 'Welcome back',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 "Let's get you started.",
                 style: TextStyle(
                   fontSize: 15,
-                  color: AppColors.textSecondary,
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                 ),
               ),
 
               const SizedBox(height: 40),
 
               // 📧 Email
-              const Text(
+              Text(
                 'Email',
                 style: TextStyle(
                   fontSize: 13,
-                  color: AppColors.textSecondary,
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                 ),
               ),
               const SizedBox(height: 6),
@@ -61,19 +61,19 @@ class LoginScreen extends StatelessWidget {
               // 🔒 Password + Forgot
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: const [
+                children: [
                   Text(
                     'Password',
                     style: TextStyle(
                       fontSize: 13,
-                      color: AppColors.textSecondary,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                     ),
                   ),
                   Text(
                     'Forgot Password ?',
                     style: TextStyle(
                       fontSize: 13,
-                      color: AppColors.primary,
+                      color: Theme.of(context).colorScheme.primary,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -109,18 +109,18 @@ class LoginScreen extends StatelessWidget {
 
               // ➖ OR Divider
               Row(
-                children: const [
-                  Expanded(child: Divider()),
+                children: [
+                  const Expanded(child: Divider()),
                   Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Text(
                       'Or',
                       style: TextStyle(
-                        color: AppColors.textSecondary,
+                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                       ),
                     ),
                   ),
-                  Expanded(child: Divider()),
+                  const Expanded(child: Divider()),
                 ],
               ),
 
@@ -134,15 +134,15 @@ class LoginScreen extends StatelessWidget {
                   'https://upload.wikimedia.org/wikipedia/commons/0/09/IOS_Google_icon.png',
                   height: 18,
                 ),
-                label: const Text(
+                label: Text(
                   'Login with Google',
                   style: TextStyle(
-                    color: AppColors.textPrimary,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 52),
-                  side: const BorderSide(color: AppColors.border),
+                  side: BorderSide(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2)),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -154,17 +154,17 @@ class LoginScreen extends StatelessWidget {
               // 🆕 Sign Up Text
               Center(
                 child: RichText(
-                  text: const TextSpan(
-                    style: TextStyle(fontSize: 14),
+                  text: TextSpan(
+                    style: const TextStyle(fontSize: 14),
                     children: [
                       TextSpan(
                         text: "Don't have an account ? ",
-                        style: TextStyle(color: AppColors.textSecondary),
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
                       ),
                       TextSpan(
                         text: 'Sign Up',
                         style: TextStyle(
-                          color: AppColors.primary,
+                          color: Theme.of(context).colorScheme.primary,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
