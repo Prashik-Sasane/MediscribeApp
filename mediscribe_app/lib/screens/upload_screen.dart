@@ -74,7 +74,7 @@ class _UploadScreenState extends State<UploadScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Upload Prescription'),
       ),
@@ -87,18 +87,18 @@ class _UploadScreenState extends State<UploadScreen> {
               height: 220,
               width: double.infinity,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.border),
+                border: Border.all(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2)),
               ),
               child: _loadingImage
                   ? const Center(child: CircularProgressIndicator())
                   : _selectedImage == null
-                      ? const Center(
+                      ? Center(
                           child: Text(
                             'No image selected',
                             style: TextStyle(
-                              color: AppColors.textSecondary,
+                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                             ),
                           ),
                         )

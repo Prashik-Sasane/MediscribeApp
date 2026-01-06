@@ -28,12 +28,19 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
   Future<void> _startPipeline() async {
     // STEP 1 — OCR (ML Kit)
     setState(() => _progress = 0.25);
+
     final ocrText = await OcrService.extractText(widget.image);
+
+    // Fallback safety
+    final safeOcrText = ocrText.trim().isEmpty
+        ? 'No readable text found in prescription.'
+        : ocrText;
 
     // STEP 2 — Gemini (TEXT UNDERSTANDING ONLY)
     setState(() => _progress = 0.65);
+
     final geminiText =
-        await GeminiService.understandPrescription(ocrText);
+        await GeminiService.understandPrescription(safeOcrText);
 
     // STEP 3 — Finish
     setState(() {
@@ -49,7 +56,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => ResultScreen(
-          text: geminiText ?? ocrText, // ✅ FIXED
+          text: geminiText ?? safeOcrText,
         ),
       ),
     );
@@ -58,7 +65,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -72,11 +79,11 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                       size: 72,
                       color: Colors.green,
                     )
-                  : const Icon(
+                  : Icon(
                       Icons.health_and_safety_rounded,
-                      key: ValueKey('loading'),
+                      key: const ValueKey('loading'),
                       size: 72,
-                      color: AppColors.primary,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
             ),
 
