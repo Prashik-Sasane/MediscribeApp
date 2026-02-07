@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mediscribe_app/core/color.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/indian_welcome_section.dart';
+import 'main_screen.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatelessWidget {
@@ -144,7 +145,7 @@ class LoginScreen extends StatelessWidget {
                             Navigator.pushReplacement(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => const HomeScreen(),
+                                builder: (_) => const MainNavigation(),
                               ),
                             );
                           },

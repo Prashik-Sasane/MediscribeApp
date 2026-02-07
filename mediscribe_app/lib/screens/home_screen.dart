@@ -1,9 +1,5 @@
 import 'package:flutter/material.dart';
-
-import 'package:mediscribe_app/core/color.dart';
-import '../core/text_styles.dart';
-import '../widgets/primary_button.dart';
-import 'package:mediscribe_app/screens/upload_screen.dart';
+import 'upload_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -11,142 +7,230 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        elevation: 0,
-        title: Text(
-          'Mediscribe',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.primary,
-            fontWeight: FontWeight.bold,
-            fontSize: 22,
-          ),
-        ),
-        actions: [
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'about') {
-                showAboutDialog(
-                  context: context,
-                  applicationName: 'Mediscribe',
-                  applicationVersion: '1.0.0',
-                  children: const [
-                    Text(
-                      'AI-powered platform for effortless prescription documentation.',
-                    ),
-                  ],
-                );
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: 'about',
-                child: Text('About'),
-              ),
-            ],
-          ),
-        ],
-      ),
+      backgroundColor: const Color(0xFF0F172A),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
 
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 24),
-
-            // 🔷 HERO CARD
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
                 children: [
-                  Text(
-                    'AI-powered solution for effortless\nprescription documentation',
-                    style: AppTextStyles.heroTitle(context),
+                  const CircleAvatar(
+                    radius: 22,
+                    backgroundImage: NetworkImage(
+                        "https://i.pravatar.cc/300"),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Upload medical prescriptions and instantly convert them into readable digital text using AI.',
-                    style: AppTextStyles.subtitle(context),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("Bimasp",
+                            style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold)),
+                        Text("Kretya Studio, Bekasi",
+                            style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
                   ),
+                  const Icon(Icons.notifications_none),
+                  const SizedBox(width: 10),
+                  const Icon(Icons.chat_bubble_outline),
                 ],
               ),
-            ),
 
-            const SizedBox(height: 32),
+              const SizedBox(height: 25),
 
-            // 🚀 CTA BUTTON
-            PrimaryButton(
-              text: 'Upload Prescription',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const UploadScreen(),
-                  ),
-                );
-              },
-            ),
+ 
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text("10.231 Coins",
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xff2E7DFF),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () {},
+                      child: const Text("+ Top Up"),
+                    )
+                  ],
+                ),
+              ),
 
-            const SizedBox(height: 36),
+              const SizedBox(height: 25),
 
-            // ⭐ FEATURES TITLE
-            Text(
-              'Why Mediscribe?',
-              style: AppTextStyles.sectionTitle(context),
-            ),
+              /// 📅 MY APPOINTMENT
+              _sectionTitle("My Appointment"),
 
-            const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
-            _featureItem(Icons.camera_alt_outlined, 'Easy prescription upload'),
-            _featureItem(Icons.flash_on_outlined, 'Fast AI-powered processing'),
-            _featureItem(Icons.medical_services_outlined, 'Designed for medical use'),
-          ],
+              _appointmentCard(),
+
+              const SizedBox(height: 25),
+
+              /// 🧩 SERVICES GRID
+              GridView.count(
+                crossAxisCount: 4,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                children: const [
+                  _serviceItem(Icons.chat, "Chat Doctor"),
+                  _serviceItem(Icons.shopping_bag, "Health Shop"),
+                  _serviceItem(Icons.calendar_month, "Appointment"),
+                  _serviceItem(Icons.home, "Home Lab"),
+                  _serviceItem(Icons.psychology, "Mental Health"),
+                  _serviceItem(Icons.face, "Skin Health"),
+                  _serviceItem(Icons.local_hospital, "Clinic"),
+                  _serviceItem(Icons.more_horiz, "See More"),
+                ],
+              ),
+
+              const SizedBox(height: 25),
+
+              /// 👨‍⚕️ TOP DOCTOR
+              _sectionTitle("Top Doctor"),
+              const SizedBox(height: 12),
+
+              _doctorCard(context),
+
+              const SizedBox(height: 30),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _featureItem(IconData icon, String text) {
-    return Builder(
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  icon,
-                  size: 20,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  text,
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                ),
-              ),
-            ],
+  /// SECTION TITLE
+  static Widget _sectionTitle(String title) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(title,
+            style: const TextStyle(
+                fontSize: 18, fontWeight: FontWeight.bold)),
+        const Text("See All", style: TextStyle(color: Colors.grey))
+      ],
+    );
+  }
+
+  /// APPOINTMENT CARD
+  static Widget _appointmentCard() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: const Row(
+        children: [
+          CircleAvatar(
+            backgroundImage:
+                NetworkImage("https://i.pravatar.cc/301"),
+            radius: 28,
           ),
-        );
-      },
+          SizedBox(width: 14),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Dr. Ragil Hutapea",
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              Text("Clinical Psychologist",
+                  style: TextStyle(color: Colors.grey)),
+              SizedBox(height: 6),
+              Text("08:00 PM  •  Tue, Apr 2",
+                  style: TextStyle(color: Colors.green)),
+            ],
+          )
+        ],
+      ),
+    );
+  }
+
+  /// DOCTOR CARD
+  static Widget _doctorCard(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          const CircleAvatar(
+            radius: 35,
+            backgroundImage:
+                NetworkImage("https://i.pravatar.cc/302"),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Dr. Ragil Hutapea",
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold)),
+                Text("Clinical Psychologist",
+                    style: TextStyle(color: Colors.grey)),
+                SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(Icons.star,
+                        color: Colors.orange, size: 18),
+                    Text(" 5.0 (128)")
+                  ],
+                )
+              ],
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xff2E7DFF),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {},
+            child: const Text("Book"),
+          )
+        ],
+      ),
+    );
+  }
+}
+
+/// SERVICE GRID ITEM
+class _serviceItem extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  const _serviceItem(this.icon, this.title);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        CircleAvatar(
+          backgroundColor: const Color(0xffEAF2FF),
+          child: Icon(icon, color: Color(0xff2E7DFF)),
+        ),
+        const SizedBox(height: 6),
+        Text(title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12))
+      ],
     );
   }
 }

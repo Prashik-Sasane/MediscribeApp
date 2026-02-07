@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-
+import 'screens/main_screen.dart';
 import 'screens/login_screen.dart';
 import 'package:mediscribe_app/core/theme.dart';
 
@@ -21,7 +21,7 @@ class MediscribeApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system, // Automatically switch based on system settings
-      home: const LoginScreen(), // ✅ LOGIN FIRST
+      home: const LoginScreen(), 
     );
   }
 }
