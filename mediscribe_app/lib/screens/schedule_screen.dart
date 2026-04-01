@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:mediscribe_app/core/app_state.dart';
 
-class ScheduleScreen extends StatelessWidget {
+class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
 
   @override
+  State<ScheduleScreen> createState() => _ScheduleScreenState();
+}
+
+class _ScheduleScreenState extends State<ScheduleScreen> {
+  int _selectedDate = 1;
+
+  @override
   Widget build(BuildContext context) {
-    final surface = Theme.of(context).colorScheme.surface;
-    final primary = Theme.of(context).colorScheme.primary;
+    final appointments = AppScope.of(context).appointments;
     final textColor = Theme.of(context).colorScheme.onSurface;
 
     return Scaffold(
@@ -33,14 +40,14 @@ class ScheduleScreen extends StatelessWidget {
               height: 80,
               child: ListView(
                 scrollDirection: Axis.horizontal,
-                children: const [
-                  _dateItem("Mon", "11", false),
-                  _dateItem("Tue", "12", true),
-                  _dateItem("Wed", "13", false),
-                  _dateItem("Thu", "14", false),
-                  _dateItem("Fri", "15", false),
-                  _dateItem("Sat", "16", false),
-                ],
+                children: List.generate(6, (index) {
+                  final days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+                  final dates = ["11", "12", "13", "14", "15", "16"];
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedDate = index),
+                    child: _dateItem(days[index], dates[index], _selectedDate == index),
+                  );
+                }),
               ),
             ),
 
@@ -57,30 +64,24 @@ class ScheduleScreen extends StatelessWidget {
 
             /// APPOINTMENT LIST
             Expanded(
-              child: ListView(
-                children: [
-                  _appointmentCard(context,
-                      "Dr. Sarah Johnson",
-                      "Dermatologist",
-                      "10:00 AM",
-                      "Online",
-                      Colors.green),
-
-                  _appointmentCard(context,
-                      "Dr. Rahul Sharma",
-                      "Cardiologist",
-                      "02:30 PM",
-                      "Clinic Visit",
-                      Colors.orange),
-
-                  _appointmentCard(context,
-                      "Dr. Emily Watson",
-                      "Psychologist",
-                      "06:00 PM",
-                      "Video Call",
-                      Colors.blue),
-                ],
-              ),
+              child: appointments.isEmpty
+                  ? const Center(
+                      child: Text('No appointments yet. Book from Doctors tab.'),
+                    )
+                  : ListView.builder(
+                      itemCount: appointments.length,
+                      itemBuilder: (context, index) {
+                        final a = appointments[index];
+                        return _appointmentCard(
+                          context,
+                          a.doctorName,
+                          a.specialty,
+                          '${a.dateLabel} • ${a.timeLabel}',
+                          a.type,
+                          a.type == 'Clinic Visit' ? Colors.orange : Colors.green,
+                        );
+                      },
+                    ),
             ),
           ],
         ),

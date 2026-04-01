@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:mediscribe_app/core/app_state.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final appState = AppScope.of(context);
+    final user = appState.currentUser;
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
@@ -21,12 +24,15 @@ class ProfileScreen extends StatelessWidget {
           children: [
 
             /// 👤 PROFILE HEADER
-            _profileHeader(),
+            _profileHeader(
+              user?.name ?? 'Guest User',
+              user?.email ?? 'guest@mediscribe.app',
+            ),
 
             const SizedBox(height: 25),
 
             /// ❤️ HEALTH CARD
-            _healthCard(),
+            _healthCard(appState.appointments.length),
 
             const SizedBox(height: 25),
 
@@ -60,7 +66,7 @@ class ProfileScreen extends StatelessWidget {
   }
 
   /// PROFILE HEADER
-  static Widget _profileHeader() {
+  static Widget _profileHeader(String name, String email) {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -75,15 +81,15 @@ class ProfileScreen extends StatelessWidget {
                 NetworkImage("https://i.pravatar.cc/303"),
           ),
           const SizedBox(width: 14),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text("Prashik Sasane",
+              children:  [
+                Text(name,
                     style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold)),
-                Text("prashik@email.com",
+                Text(email,
                     style: TextStyle(color: Colors.grey)),
               ],
             ),
@@ -97,7 +103,7 @@ class ProfileScreen extends StatelessWidget {
   }
 
   /// HEALTH CARD
-  static Widget _healthCard() {
+  static Widget _healthCard(int appointments) {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -106,10 +112,10 @@ class ProfileScreen extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(18),
       ),
-      child: const Row(
+      child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _healthItem("12", "Appointments"),
+        children:  [
+          _healthItem('$appointments', "Appointments"),
           _healthItem("05", "Orders"),
           _healthItem("08", "Reports"),
         ],

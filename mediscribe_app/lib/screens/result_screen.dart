@@ -1,59 +1,86 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:mediscribe_app/core/app_state.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../core/color.dart';
 import '../services/pdf_service.dart';
 import '../widgets/primary_button.dart';
 
-class ResultScreen extends StatelessWidget {
+class ResultScreen extends StatefulWidget {
   final String text;
 
   const ResultScreen({super.key, required this.text});
 
-  /// 🧠 Temporary structured extraction
-  /// (Later Gemini will give better structured output)
+  @override
+  State<ResultScreen> createState() => _ResultScreenState();
+}
+
+class _ResultScreenState extends State<ResultScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppScope.of(context).setPrescriptionText(widget.text);
+    });
+  }
+
   Map<String, dynamic> _parseData(String raw) {
+    final lines = raw
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+
+    final doctorLine = lines.cast<String?>().firstWhere(
+          (line) => line!.toLowerCase().contains('dr.'),
+          orElse: () => null,
+        );
+    final patientLine = lines.cast<String?>().firstWhere(
+          (line) => line!.toLowerCase().contains('patient'),
+          orElse: () => null,
+        );
+
+    final medicines = <Map<String, String>>[];
+    for (final line in lines.take(6)) {
+      medicines.add({
+        'name': line.length > 28 ? '${line.substring(0, 28)}...' : line,
+        'dosage': 'As advised',
+        'frequency': 'Daily',
+        'instructions': 'After meal',
+      });
+    }
+
     return {
-      'doctor': 'Dr. Reynald O. Joson, M.D.',
-      'hospital': 'Manila Doctors Hospital',
-      'license': '44609',
-      'patient': 'John Doe',
-      'age': '45',
-      'gender': 'Male',
-      'date': '12-06-2014',
-      'medicines': [
-        {
-          'name': 'Paracetamol',
-          'dosage': '500 mg',
-          'frequency': 'Thrice daily',
-          'instructions': 'After food',
-        },
-        {
-          'name': 'Amoxicillin',
-          'dosage': '250 mg',
-          'frequency': 'Twice daily',
-          'instructions': 'Orally',
-        },
-        {
-          'name': 'Cough Syrup',
-          'dosage': '5 ml',
-          'frequency': 'Twice daily',
-          'instructions': 'Orally',
-        },
-      ],
-      'notes': 'Follow-up after 7 days',
+      'doctor': doctorLine ?? 'Doctor not clearly recognized',
+      'hospital': 'Nearby Care Network',
+      'license': 'N/A',
+      'patient': patientLine ?? 'Patient details unavailable',
+      'age': '--',
+      'gender': '--',
+      'date': DateTime.now().toString().split(' ').first,
+      'medicines': medicines.isEmpty
+          ? [
+              {
+                'name': 'No medicine extracted',
+                'dosage': '-',
+                'frequency': '-',
+                'instructions': '-',
+              }
+            ]
+          : medicines,
+      'notes': lines.length > 1 ? lines.last : raw,
     };
   }
 
   Future<void> _exportPdf(BuildContext context) async {
-    final File file = await PdfService.generatePrescriptionPdf(text);
+    final File file = await PdfService.generatePrescriptionPdf(widget.text);
     Share.shareXFiles([XFile(file.path)], text: 'Prescription Report');
   }
 
   @override
   Widget build(BuildContext context) {
-    final data = _parseData(text);
+    final data = _parseData(widget.text);
 
     return Scaffold(
       appBar: AppBar(
@@ -125,7 +152,7 @@ class ResultScreen extends StatelessWidget {
                 Expanded(
                   child: PrimaryButton(
                     text: 'Share',
-                    onPressed: () => Share.share(text),
+                    onPressed: () => Share.share(widget.text),
                   ),
                 ),
               ],
