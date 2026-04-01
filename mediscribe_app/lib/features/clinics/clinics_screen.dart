@@ -28,6 +28,7 @@ class ClinicsScreen extends StatelessWidget {
                         specialty: "General Physician",
                         imageUrl: "https://i.pravatar.cc/${240 + index}",
                         consultationType: "Clinic Visit",
+                        locationLabel: "2.0 km away",
                       ),
                     ),
                   );

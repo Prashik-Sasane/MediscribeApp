@@ -1,45 +1,108 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:mediscribe_app/services/doctor_api_service.dart';
 import 'doctor_detail_screen.dart';
 
-class DoctorListScreen extends StatelessWidget {
+class DoctorListScreen extends StatefulWidget {
   const DoctorListScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final List<Map<String, String>> doctors = [
-      {
-        "name": "Dr. Rahul Sharma",
-        "speciality": "Cardiologist",
-        "image": "https://i.pravatar.cc/201"
-      },
-      {
-        "name": "Dr. Priya Mehta",
-        "speciality": "Dermatologist",
-        "image": "https://i.pravatar.cc/202"
-      },
-      {
-        "name": "Dr. Aman Verma",
-        "speciality": "Neurologist",
-        "image": "https://i.pravatar.cc/203"
-      },
-      {
-        "name": "Dr. Sneha Patil",
-        "speciality": "Psychologist",
-        "image": "https://i.pravatar.cc/204"
-      },
-    ];
+  State<DoctorListScreen> createState() => _DoctorListScreenState();
+}
 
+class _DoctorListScreenState extends State<DoctorListScreen> {
+  bool _loading = true;
+  String? _error;
+  List<NearbyDoctor> _doctors = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNearbyDoctors();
+  }
+
+  Future<void> _loadNearbyDoctors() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final hasService = await Geolocator.isLocationServiceEnabled();
+      if (!hasService) {
+        setState(() {
+          _loading = false;
+          _error = 'Location is turned off. Please enable GPS.';
+        });
+        return;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        setState(() {
+          _loading = false;
+          _error = 'Location permission denied.';
+        });
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      final doctors = await DoctorApiService.getNearbyDoctors(
+        lat: position.latitude,
+        lng: position.longitude,
+      );
+      setState(() {
+        _loading = false;
+        _doctors = doctors;
+        if (doctors.isEmpty) {
+          _error = 'No nearby doctors found or backend is unreachable.';
+        }
+      });
+    } catch (_) {
+      setState(() {
+        _loading = false;
+        _error = 'Could not load nearby doctors.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
-        title: const Text("Doctors"),
+        title: const Text("Nearby Doctors"),
         backgroundColor: const Color(0xFF1E293B),
       ),
-      body: ListView.builder(
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_error!, style: const TextStyle(color: Colors.white)),
+                        const SizedBox(height: 12),
+                        ElevatedButton(
+                          onPressed: _loadNearbyDoctors,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: doctors.length,
+        itemCount: _doctors.length,
         itemBuilder: (context, index) {
-          final doctor = doctors[index];
+          final doctor = _doctors[index];
 
           return Container(
             margin: const EdgeInsets.only(bottom: 12),
@@ -52,7 +115,7 @@ class DoctorListScreen extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 30,
-                  backgroundImage: NetworkImage(doctor["image"]!),
+                  backgroundImage: NetworkImage(doctor.imageUrl),
                 ),
                 const SizedBox(width: 12),
 
@@ -61,7 +124,7 @@ class DoctorListScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        doctor["name"]!,
+                        doctor.name,
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -69,15 +132,15 @@ class DoctorListScreen extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        doctor["speciality"]!,
+                        '${doctor.specialty} • ${doctor.distanceKm.toStringAsFixed(1)} km',
                         style: const TextStyle(color: Colors.grey),
                       ),
                       const SizedBox(height: 5),
-                      const Row(
+                      Row(
                         children: [
-                          Icon(Icons.star, color: Colors.orange, size: 16),
-                          Text(" 4.8",
-                              style: TextStyle(color: Colors.white)),
+                          const Icon(Icons.star, color: Colors.orange, size: 16),
+                          Text(" ${doctor.rating.toStringAsFixed(1)}",
+                              style: const TextStyle(color: Colors.white)),
                         ],
                       )
                     ],
@@ -90,10 +153,12 @@ class DoctorListScreen extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (_) => DoctorDetailScreen(
-                          doctorName: doctor["name"]!,
-                          specialty: doctor["speciality"]!,
-                          imageUrl: doctor["image"]!,
+                          doctorName: doctor.name,
+                          specialty: doctor.specialty,
+                          imageUrl: doctor.imageUrl,
                           consultationType: 'Online',
+                          feeLabel: '₹${doctor.fee}',
+                          locationLabel: '${doctor.distanceKm.toStringAsFixed(1)} km away',
                         ),
                       ),
                     );

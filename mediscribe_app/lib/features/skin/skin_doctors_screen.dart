@@ -30,6 +30,7 @@ class SkinDoctorsScreen extends StatelessWidget {
                         specialty: "Dermatologist",
                         imageUrl: "https://i.pravatar.cc/${170 + index}",
                         consultationType: "Clinic Visit",
+                        locationLabel: "3.5 km away",
                       ),
                     ),
                   );

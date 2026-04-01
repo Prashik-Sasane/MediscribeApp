@@ -30,6 +30,7 @@ class MentalDoctorsScreen extends StatelessWidget {
                         specialty: "Psychologist",
                         imageUrl: "https://i.pravatar.cc/${150 + index}",
                         consultationType: "Video Call",
+                        locationLabel: "Online consultation",
                       ),
                     ),
                   );

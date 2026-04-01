@@ -9,6 +9,7 @@ class DoctorDetailScreen extends StatefulWidget {
     required this.imageUrl,
     this.consultationType = 'Clinic Visit',
     this.feeLabel = '₹500',
+    this.locationLabel = '2 km away',
   });
 
   final String doctorName;
@@ -16,6 +17,7 @@ class DoctorDetailScreen extends StatefulWidget {
   final String imageUrl;
   final String consultationType;
   final String feeLabel;
+  final String locationLabel;
 
   @override
   State<DoctorDetailScreen> createState() => _DoctorDetailScreenState();
@@ -52,26 +54,31 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> {
                     radius: 40,
                     backgroundImage: NetworkImage(widget.imageUrl),
                   ),
-                  SizedBox(width: 16),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(widget.doctorName,
-                            style: TextStyle(
+                            style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold)),
                         Text(widget.specialty,
-                            style: TextStyle(color: Colors.grey)),
-                        SizedBox(height: 6),
+                            style: const TextStyle(color: Colors.grey)),
+                        const SizedBox(height: 6),
                         Row(
                           children: [
-                            Icon(Icons.star,color: Colors.orange,size:18),
+                            const Icon(Icons.star,color: Colors.orange,size:18),
                             Text(" 4.9 (220 Reviews)",
-                                style: TextStyle(color: Colors.white))
+                                style: const TextStyle(color: Colors.white))
                           ],
-                        )
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Nearby: ${widget.locationLabel}',
+                          style: const TextStyle(color: Colors.grey),
+                        ),
                       ],
                     ),
                   ),
@@ -210,7 +217,7 @@ class _DoctorDetailScreenState extends State<DoctorDetailScreen> {
         dateLabel: dates[selectedDateIndex],
         timeLabel: times[selectedTimeIndex],
         type: widget.consultationType,
-        location: '2 km away',
+        location: widget.locationLabel,
       ),
     );
     showDialog(
