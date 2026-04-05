@@ -1,231 +1,311 @@
 import 'package:flutter/material.dart';
-import 'package:mediscribe_app/core/app_state.dart';
+
+// Note: I'm using mock data placeholders. 
+// Replace user?.name with your actual appState logic.
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final appState = AppScope.of(context);
-    final user = appState.currentUser;
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: const Color(0xFF0F172A), // Deep Slate Blue
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text("Profile",
-            style: TextStyle(color: Colors.white)),
+        title: const Text("My Profile",
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: Colors.white70),
+            onPressed: () {},
+          )
+        ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(18),
+        physics: const BouncingScrollPhysics(),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const SizedBox(height: 110), // Space for AppBar
 
             /// 👤 PROFILE HEADER
-            _profileHeader(
-              user?.name ?? 'Guest User',
-              user?.email ?? 'guest@mediscribe.app',
+            const _ProfessionalHeader(
+              name: "Jenny William",
+              email: "jenny.william@gmail.com",
             ),
 
-            const SizedBox(height: 25),
+            const SizedBox(height: 30),
 
-            /// ❤️ HEALTH CARD
-            _healthCard(appState.appointments.length),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  /// ❤️ HEALTH DASHBOARD (Metrics)
+                  const _HealthStatsRow(appointments: 12, orders: 5, reports: 8),
 
-            const SizedBox(height: 25),
+                  const SizedBox(height: 32),
 
-            /// ⚡ QUICK ACTIONS
-            const Text("Quick Actions",
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(height: 14),
+                  /// ⚡ QUICK ACTIONS GRID
+                  const Text("Quick Actions",
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  const _QuickActionGrid(),
 
-            _quickActions(),
+                  const SizedBox(height: 32),
 
-            const SizedBox(height: 25),
+                  /// 💎 PREMIUM UPGRADE CARD
+                  const _PremiumCard(),
 
-            /// 💎 SUBSCRIPTION CARD
-            _subscriptionCard(),
+                  const SizedBox(height: 32),
 
-            const SizedBox(height: 25),
+                  /// ⚙️ SETTINGS SECTION
+                  const Text("General Settings",
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  _buildMenuSection([
+                    _MenuData(Icons.shopping_bag_outlined, "Medicine Orders"),
+                    _MenuData(Icons.calendar_today_outlined, "Appointment History"),
+                    _MenuData(Icons.description_outlined, "Medical Records"),
+                    _MenuData(Icons.notifications_none_rounded, "Notifications"),
+                  ]),
 
-            /// ⚙️ MENU OPTIONS
-            _menuTile(Icons.shopping_bag, "My Medicine Orders"),
-            _menuTile(Icons.calendar_month, "My Appointments"),
-            _menuTile(Icons.description, "Prescription History"),
-            _menuTile(Icons.settings, "Settings"),
-            _menuTile(Icons.help_outline, "Help & Support"),
-            _menuTile(Icons.logout, "Logout", isLogout: true),
+                  const SizedBox(height: 24),
+                  
+                  /// 🚪 LOGOUT
+                  _buildMenuTile(Icons.logout_rounded, "Logout", isLogout: true),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  /// PROFILE HEADER
-  static Widget _profileHeader(String name, String email) {
+  // Helper for Sectioned Menu
+  Widget _buildMenuSection(List<_MenuData> items) {
     return Container(
-      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
       ),
-      child: Row(
-        children: [
-          const CircleAvatar(
-            radius: 35,
-            backgroundImage:
-                NetworkImage("https://i.pravatar.cc/303"),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children:  [
-                Text(name,
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold)),
-                Text(email,
-                    style: TextStyle(color: Colors.grey)),
-              ],
-            ),
-          ),
-          IconButton(
-              onPressed: () {},
-              icon: const Icon(Icons.edit))
-        ],
+      child: Column(
+        children: items.map((item) => _buildMenuTile(item.icon, item.title)).toList(),
       ),
     );
   }
 
-  /// HEALTH CARD
-  static Widget _healthCard(int appointments) {
+  Widget _buildMenuTile(IconData icon, String title, {bool isLogout = false}) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: isLogout ? Colors.red.withOpacity(0.1) : const Color(0xFF2E7DFF).withOpacity(0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: isLogout ? Colors.redAccent : const Color(0xFF4D91FF), size: 22),
+      ),
+      title: Text(title,
+          style: TextStyle(
+            color: isLogout ? Colors.redAccent : Colors.white.withOpacity(0.9),
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+          )),
+      trailing: Icon(Icons.arrow_forward_ios_rounded,
+          color: isLogout ? Colors.transparent : Colors.white24, size: 14),
+      onTap: () {},
+    );
+  }
+}
+
+// --- SUB-WIDGETS ---
+
+class _ProfessionalHeader extends StatelessWidget {
+  final String name;
+  final String email;
+
+  const _ProfessionalHeader({required this.name, required this.email});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        children: [
+          Stack(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFF2E7DFF), width: 3),
+                ),
+                child: const CircleAvatar(
+                  radius: 55,
+                  backgroundImage: NetworkImage("https://i.pravatar.cc/300"),
+                ),
+              ),
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF2E7DFF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 18),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(name,
+              style: const TextStyle(
+                  color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(email,
+              style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14)),
+        ],
+      ),
+    );
+  }
+}
+
+class _HealthStatsRow extends StatelessWidget {
+  final int appointments, orders, reports;
+  const _HealthStatsRow({required this.appointments, required this.orders, required this.reports});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xff2E7DFF), Color(0xff5BA4FF)],
+          colors: [Color(0xFF2E7DFF), Color(0xFF1A56B8)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+              color: const Color(0xFF2E7DFF).withOpacity(0.3),
+              blurRadius: 20,
+              offset: const Offset(0, 10))
+        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children:  [
-          _healthItem('$appointments', "Appointments"),
-          _healthItem("05", "Orders"),
-          _healthItem("08", "Reports"),
+        children: [
+          _statItem(appointments.toString(), "Visits"),
+          _vDivider(),
+          _statItem(orders.toString(), "Orders"),
+          _vDivider(),
+          _statItem(reports.toString(), "Reports"),
         ],
       ),
     );
   }
 
-  /// QUICK ACTION GRID
-  static Widget _quickActions() {
-    return GridView.count(
-      crossAxisCount: 4,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      children: const [
-        _actionItem(Icons.calendar_month, "Appointments"),
-        _actionItem(Icons.medication, "Medicines"),
-        _actionItem(Icons.document_scanner, "Prescriptions"),
-        _actionItem(Icons.camera_alt, "Scan"),
+  Widget _vDivider() => Container(height: 30, width: 1, color: Colors.white24);
+
+  Widget _statItem(String val, String label) {
+    return Column(
+      children: [
+        Text(val,
+            style: const TextStyle(
+                color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
       ],
     );
   }
+}
 
-  /// SUBSCRIPTION CARD
-  static Widget _subscriptionCard() {
+class _QuickActionGrid extends StatelessWidget {
+  const _QuickActionGrid();
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = [
+      {'icon': Icons.calendar_today_rounded, 'label': 'Schedule'},
+      {'icon': Icons.medication_rounded, 'label': 'Meds'},
+      {'icon': Icons.qr_code_scanner_rounded, 'label': 'Scan'},
+      {'icon': Icons.history_rounded, 'label': 'History'},
+    ];
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: actions.map((act) {
+        return Column(
+          children: [
+            Container(
+              width: 65,
+              height: 65,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withOpacity(0.08)),
+              ),
+              child: Icon(act['icon'] as IconData, color: const Color(0xFF4D91FF), size: 26),
+            ),
+            const SizedBox(height: 10),
+            Text(act['label'] as String,
+                style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          ],
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _PremiumCard extends StatelessWidget {
+  const _PremiumCard();
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(18),
+        color: const Color(0xFFFF9F1C).withOpacity(0.1),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFFF9F1C).withOpacity(0.3)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.workspace_premium,
-              color: Colors.orange, size: 40),
-          const SizedBox(width: 14),
+          const Icon(Icons.workspace_premium_rounded, color: Color(0xFFFF9F1C), size: 40),
+          const SizedBox(width: 16),
           const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("Premium Plan",
+                Text("Join Premium",
                     style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16)),
-                Text("Unlimited scans & priority doctors",
-                    style: TextStyle(color: Colors.grey)),
+                        color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                Text("Get priority doctor consultations",
+                    style: TextStyle(color: Colors.white54, fontSize: 12)),
               ],
             ),
           ),
-          ElevatedButton(
-            onPressed: () {},
-            child: const Text("Upgrade"),
-          )
+          Icon(Icons.arrow_forward_rounded, color: const Color(0xFFFF9F1C).withOpacity(0.8)),
         ],
       ),
     );
   }
-
-  /// MENU TILE
-  static Widget _menuTile(IconData icon, String title,
-      {bool isLogout = false}) {
-    return ListTile(
-      leading: Icon(icon,
-          color: isLogout ? Colors.red : Colors.blue),
-      title: Text(title),
-      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-    );
-  }
 }
 
-/// HEALTH ITEM
-class _healthItem extends StatelessWidget {
-  final String value;
-  final String label;
-  const _healthItem(this.value, this.label);
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(value,
-            style: const TextStyle(
-                fontSize: 22,
-                color: Colors.white,
-                fontWeight: FontWeight.bold)),
-        Text(label,
-            style: const TextStyle(color: Colors.white70))
-      ],
-    );
-  }
-}
-
-/// ACTION GRID ITEM
-class _actionItem extends StatelessWidget {
+class _MenuData {
   final IconData icon;
   final String title;
-  const _actionItem(this.icon, this.title);
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        CircleAvatar(
-          backgroundColor: const Color(0xffEAF2FF),
-          child: Icon(icon, color: Color(0xff2E7DFF)),
-        ),
-        const SizedBox(height: 6),
-        Text(title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12))
-      ],
-    );
-  }
+  _MenuData(this.icon, this.title);
 }

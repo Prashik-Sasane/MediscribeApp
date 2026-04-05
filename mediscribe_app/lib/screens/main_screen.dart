@@ -16,7 +16,7 @@ class _MainNavigationState extends State<MainNavigation> {
 
   final screens = const [
     HomeScreen(),
-    ScheduleScreen(),
+    DoctorListScreen(),
     UploadScreen(), // OCR screen
     ProfileScreen(), // Profile (later)
   ];
@@ -37,7 +37,7 @@ class _MainNavigationState extends State<MainNavigation> {
           BottomNavigationBarItem(
               icon: Icon(Icons.home), label: "Home"),
           BottomNavigationBarItem(
-              icon: Icon(Icons.calendar_month), label: "Schedule"),
+              icon: Icon(Icons.calendar_month), label: "Appointments"),
           BottomNavigationBarItem(
               icon: Icon(Icons.document_scanner), label: "Scan"),
           BottomNavigationBarItem(

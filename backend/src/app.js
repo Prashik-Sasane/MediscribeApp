@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./routes/authRoutes");
 const doctorRoutes = require("./routes/doctorRoutes");
+const productRoutes = require("./routes/productRoutes");
+const labRoutes = require("./routes/labRoutes");
 
 const app = express();
 
@@ -12,7 +14,14 @@ app.get("/", (_req, res) => {
   res.json({
     ok: true,
     message: "Mediscribe backend is running",
-    endpoints: ["/health", "/api/auth/signup", "/api/auth/login", "/api/doctors/nearby"],
+    endpoints: [
+      "/health",
+      "/api/auth/signup",
+      "/api/auth/login",
+      "/api/doctors/nearby",
+      "/api/products",
+      "/api/labs",
+    ],
   });
 });
 
@@ -22,6 +31,8 @@ app.get("/health", (_req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/doctors", doctorRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/labs", labRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

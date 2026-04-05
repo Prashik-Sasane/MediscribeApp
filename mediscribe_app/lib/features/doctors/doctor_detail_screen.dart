@@ -1,259 +1,160 @@
 import 'package:flutter/material.dart';
-import 'package:mediscribe_app/core/app_state.dart';
-
-class DoctorDetailScreen extends StatefulWidget {
-  const DoctorDetailScreen({
-    super.key,
-    required this.doctorName,
-    required this.specialty,
-    required this.imageUrl,
-    this.consultationType = 'Clinic Visit',
-    this.feeLabel = '₹500',
-    this.locationLabel = '2 km away',
-  });
-
-  final String doctorName;
-  final String specialty;
-  final String imageUrl;
-  final String consultationType;
-  final String feeLabel;
-  final String locationLabel;
-
-  @override
-  State<DoctorDetailScreen> createState() => _DoctorDetailScreenState();
-}
-
-class _DoctorDetailScreenState extends State<DoctorDetailScreen> {
-
-  int selectedDateIndex = 0;
-  int selectedTimeIndex = -1;
-
-  final List<String> dates = ["Mon 12", "Tue 13", "Wed 14", "Thu 15", "Fri 16"];
-  final List<String> times = ["09:00 AM", "10:30 AM", "12:00 PM", "02:30 PM", "05:00 PM"];
+import 'package:mediscribe_app/screens/appointment.dart';
+import 'package:mediscribe_app/features/doctors/bookappointment.dart';
+class DoctorDetailScreen extends StatelessWidget {
+  const DoctorDetailScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(title: const Text("Doctor Details")),
+      backgroundColor: const Color(0xFF0F172A), // Dark Navy
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text("Doctor Details", style: TextStyle(color: Colors.white)),
+        actions: [
+          IconButton(icon: const Icon(Icons.share, color: Colors.white), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.favorite_border, color: Colors.white), onPressed: () {}),
+        ],
+      ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E293B),
-                borderRadius: BorderRadius.circular(18),
-              ),
+            // Doctor Image & Basic Info
+            const CircleAvatar(
+              radius: 80,
+              backgroundImage: NetworkImage('https://images.unsplash.com/photo-1559839734-2b71f1e3c770?w=400'),
+            ),
+            const SizedBox(height: 16),
+            const Text("Dr. Jenny William", 
+              style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+            const Text("Dentist", style: TextStyle(color: Colors.white54, fontSize: 16)),
+            
+            // Stats Row (Patients, Experience, Rating, Reviews)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 25, horizontal: 20),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  CircleAvatar(
-                    radius: 40,
-                    backgroundImage: NetworkImage(widget.imageUrl),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(widget.doctorName,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold)),
-                        Text(widget.specialty,
-                            style: const TextStyle(color: Colors.grey)),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            const Icon(Icons.star,color: Colors.orange,size:18),
-                            Text(" 4.9 (220 Reviews)",
-                                style: const TextStyle(color: Colors.white))
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Nearby: ${widget.locationLabel}',
-                          style: const TextStyle(color: Colors.grey),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _buildStatItem(Icons.people_alt_outlined, "3,500+", "Patients"),
+                  _buildStatItem(Icons.work_outline, "6+", "Years Exp."),
+                  _buildStatItem(Icons.star_outline, "4.9+", "Rating"),
+                  _buildStatItem(Icons.chat_bubble_outline, "5,000+", "Reviews"),
                 ],
               ),
             ),
 
+            // About Doctor Section
+            _buildSectionHeader("About Doctor"),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                "Dr. Jenny William is an experienced dentist with over 6 years of practice. She specializes in advanced dental procedures and patient-focused care.",
+                style: TextStyle(color: Colors.white70, height: 1.5),
+              ),
+            ),
+
+            // Doctor Contact
+            _buildSectionHeader("Doctor Contact"),
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+              leading: const CircleAvatar(backgroundColor: Color(0xFF1E293B), child: Icon(Icons.person, color: Colors.white)),
+              title: const Text("Dr. Jenny William", style: TextStyle(color: Colors.white)),
+              subtitle: const Text("Dentist", style: TextStyle(color: Colors.white38)),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildIconButton(Icons.chat),
+                  const SizedBox(width: 10),
+                  _buildIconButton(Icons.phone),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 100), // Space for bottom button
+          ],
+        ),
+      ),
+      bottomSheet: Container(
+        color: const Color(0xFF0F172A),
+        padding: const EdgeInsets.all(20),
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF2E7DFF),
+            minimumSize: const Size(double.infinity, 55),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          ),
+            onPressed: () {
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const BookingScreen()));
+            },
+          child: const Text("Book Appointment", style: TextStyle(fontSize: 16, color: Colors.white)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatItem(IconData icon, String value, String label) {
+    return Column(
+      children: [
+        CircleAvatar(
+          backgroundColor: const Color(0xFF1E293B),
+          child: Icon(icon, color: const Color(0xFF2E7DFF), size: 20),
+        ),
+        const SizedBox(height: 8),
+        Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        Text(label, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+      ],
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
+  Widget _buildIconButton(IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: const Color(0xFF1E293B), borderRadius: BorderRadius.circular(10)),
+      child: Icon(icon, color: Colors.white, size: 20),
+    );
+  }
+
+  void _showBookingSuccess(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      // shape: const RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(30),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.check_circle, color: Colors.green, size: 80),
             const SizedBox(height: 20),
-
-            /// STATS
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _statItem("10+", "Years Exp"),
-                _statItem("2K+", "Patients"),
-                _statItem(widget.feeLabel, "Fee"),
-              ],
-            ),
-
-            const SizedBox(height: 25),
-
-            /// ABOUT
-            const Text("About Doctor",
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            const Text(
-              "Experienced Cardiologist specializing in heart health, hypertension and preventive care.",
-              style: TextStyle(color: Colors.grey),
-            ),
-
-            const SizedBox(height: 25),
-
-            /// SELECT DATE
-            const Text("Select Date",
-                style: TextStyle(color: Colors.white, fontSize: 18)),
+            const Text("Booking Successful!", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
-
-            SizedBox(
-              height: 60,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: dates.length,
-                itemBuilder: (context,index){
-                  final selected = selectedDateIndex == index;
-                  return GestureDetector(
-                    onTap: (){
-                      setState(()=> selectedDateIndex = index);
-                    },
-                    child: Container(
-                      width: 80,
-                      margin: const EdgeInsets.only(right: 10),
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? const Color(0xff2E7DFF)
-                            : const Color(0xFF1E293B),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Center(
-                        child: Text(
-                          dates[index],
-                          style: TextStyle(
-                            color: selected ? Colors.white : Colors.grey,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            const SizedBox(height: 25),
-
-            /// TIME SLOTS
-            const Text("Available Time",
-                style: TextStyle(color: Colors.white, fontSize: 18)),
-            const SizedBox(height: 10),
-
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: List.generate(times.length, (index){
-                final selected = selectedTimeIndex == index;
-                return GestureDetector(
-                  onTap: (){
-                    setState(()=> selectedTimeIndex = index);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? const Color(0xff2E7DFF)
-                          : const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      times[index],
-                      style: TextStyle(
-                        color: selected ? Colors.white : Colors.grey,
-                      ),
-                    ),
-                  ),
-                );
-              }),
-            ),
-
+            const Text("Your appointment with Dr. Jenny has been scheduled.", textAlign: TextAlign.center, style: TextStyle(color: Colors.white54)),
             const SizedBox(height: 30),
-
-            /// BOOK BUTTON
-            SizedBox(
-              width: double.infinity,
-              height: 55,
-              child: ElevatedButton(
-                onPressed: selectedTimeIndex == -1 ? null : (){
-                  _bookAppointment(context);
-                },
-                child: const Text("Book Appointment"),
-              ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context); // Close sheet
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const AppointmentsScreen()));
+              },
+              child: const Text("View My Appointments"),
             )
           ],
         ),
       ),
-    );
-  }
-
-  void _bookAppointment(BuildContext context) {
-    final appState = AppScope.of(context);
-    appState.bookAppointment(
-      Appointment(
-        doctorName: widget.doctorName,
-        specialty: widget.specialty,
-        dateLabel: dates[selectedDateIndex],
-        timeLabel: times[selectedTimeIndex],
-        type: widget.consultationType,
-        location: widget.locationLabel,
-      ),
-    );
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Success 🎉"),
-        content: Text(
-          'Appointment with ${widget.doctorName} on ${dates[selectedDateIndex]} at ${times[selectedTimeIndex]}',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("OK"),
-          )
-        ],
-      ),
-    );
-  }
-}
-
-class _statItem extends StatelessWidget {
-  final String value;
-  final String label;
-  const _statItem(this.value, this.label);
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(value,
-            style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 18)),
-        Text(label, style: const TextStyle(color: Colors.grey)),
-      ],
     );
   }
 }

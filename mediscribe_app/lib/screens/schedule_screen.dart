@@ -1,192 +1,164 @@
 import 'package:flutter/material.dart';
-import 'package:mediscribe_app/core/app_state.dart';
+import 'package:mediscribe_app/features/doctors/doctor_detail_screen.dart';
+import 'package:mediscribe_app/features/doctors/doctor_list_screen.dart';
 
-class ScheduleScreen extends StatefulWidget {
-  const ScheduleScreen({super.key});
+class DoctorListScreen extends StatefulWidget {
+  const DoctorListScreen({super.key});
 
   @override
-  State<ScheduleScreen> createState() => _ScheduleScreenState();
+  State<DoctorListScreen> createState() => _DoctorListScreenState();
 }
 
-class _ScheduleScreenState extends State<ScheduleScreen> {
-  int _selectedDate = 1;
+class _DoctorListScreenState extends State<DoctorListScreen> {
+  // Mock data for the list
+  final List<Map<String, dynamic>> doctors = [
+     {
+      "name": "Dr. James Chen",
+      "specialty": "Cardiologist",
+      "rating": 4.8,
+      "reviews": 420,
+      "price": 40,
+      "image": "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=200",
+    },
+    {
+      "name": "Dr. James Chen",
+      "specialty": "Cardiologist",
+      "rating": 4.8,
+      "reviews": 420,
+      "price": 40,
+      "image": "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=200",
+    },
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final appointments = AppScope.of(context).appointments;
-    final textColor = Theme.of(context).colorScheme.onSurface;
-
     return Scaffold(
-      appBar: AppBar(title: const Text("My Schedule")),
-      body: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-
-            /// TODAY DATE
-            Text(
-              "Today, 12 March",
-              style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: textColor),
-            ),
-
-            const SizedBox(height: 18),
-
-            /// 📆 HORIZONTAL DATE STRIP
-            SizedBox(
-              height: 80,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: List.generate(6, (index) {
-                  final days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-                  final dates = ["11", "12", "13", "14", "15", "16"];
-                  return GestureDetector(
-                    onTap: () => setState(() => _selectedDate = index),
-                    child: _dateItem(days[index], dates[index], _selectedDate == index),
-                  );
-                }),
-              ),
-            ),
-
-            const SizedBox(height: 25),
-
-            /// UPCOMING TITLE
-            Text("Upcoming Appointments",
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: textColor)),
-
-            const SizedBox(height: 14),
-
-            /// APPOINTMENT LIST
-            Expanded(
-              child: appointments.isEmpty
-                  ? const Center(
-                      child: Text('No appointments yet. Book from Doctors tab.'),
-                    )
-                  : ListView.builder(
-                      itemCount: appointments.length,
-                      itemBuilder: (context, index) {
-                        final a = appointments[index];
-                        return _appointmentCard(
-                          context,
-                          a.doctorName,
-                          a.specialty,
-                          '${a.dateLabel} • ${a.timeLabel}',
-                          a.type,
-                          a.type == 'Clinic Visit' ? Colors.orange : Colors.green,
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
+      backgroundColor: const Color(0xFF0F172A), // Dark Navy background
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Text("Find Doctors", style: TextStyle(color: Colors.white)),
       ),
-    );
-  }
-
-  /// APPOINTMENT CARD
-  static Widget _appointmentCard(
-      BuildContext context,
-      String name,
-      String specialty,
-      String time,
-      String type,
-      Color statusColor) {
-    final surface = Theme.of(context).colorScheme.surface;
-    final textColor = Theme.of(context).colorScheme.onSurface;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: surface,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Row(
+      body: Column(
         children: [
-          const CircleAvatar(
-            radius: 30,
-            backgroundImage:
-                NetworkImage("https://i.pravatar.cc/304"),
-          ),
-          const SizedBox(width: 14),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          // Search & Filter Bar
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
               children: [
-                Text(name,
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: textColor)),
-                Text(specialty,
-                    style: const TextStyle(color: Colors.grey)),
-                const SizedBox(height: 6),
-                Text(time,
-                    style: TextStyle(
-                        color: statusColor,
-                        fontWeight: FontWeight.bold)),
+                Expanded(
+                  child: SizedBox(
+                    height: 55,
+                    child: const TextField(
+                      style: TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: "Search",
+                        hintStyle: TextStyle(color: Colors.white38, fontSize: 15),
+                        prefixIcon: Icon(Icons.search_rounded, color: Colors.white54),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 15),
+                        suffixIcon: Icon(Icons.tune_rounded, color: Colors.white54), // Best icon for settings/filter
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 15),
+                // Filter Button
+                GestureDetector(
+                  onTap: () => _showFilterSheet(context),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2E7DFF),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.tune_rounded, color: Colors.white),
+                  ),
+                ),
               ],
             ),
           ),
 
-          Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(10),
+          // Doctor List
+          Expanded(
+            child: ListView.builder(
+              itemCount: doctors.length,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemBuilder: (context, index) {
+                final doc = doctors[index];
+                return GestureDetector(
+                  onTap: () {
+                    // Navigate to Detail Page (Created in previous step)
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const DoctorDetailScreen()),
+                    );
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 15),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      children: [
+                        // Left Side: Image
+                        ClipRRect(
+                          // borderRadius: BorderRadius.circular(15),
+                          child: Image.network(
+                            doc['image'],
+                            width: 100,
+                            height: 100,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        const SizedBox(width: 15),
+                        // Right Side: Info
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(doc['name'], 
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                              const SizedBox(height: 4),
+                              Text(doc['specialty'], style: const TextStyle(color: Colors.white38, fontSize: 13)),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  const Icon(Icons.star, color: Colors.amber, size: 16),
+                                  Text(" ${doc['rating']} ", 
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  Text("(${doc['reviews']} Reviews)", 
+                                    style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text("\$${doc['price']}/Consultation", 
+                                style: const TextStyle(color: Color(0xFF2E7DFF), fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.arrow_forward_ios, color: Colors.white24, size: 16),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
-            child: Text(type,
-                style: TextStyle(
-                    color: statusColor,
-                    fontWeight: FontWeight.bold)),
-          )
+          ),
         ],
       ),
     );
   }
-}
 
-/// DATE ITEM
-class _dateItem extends StatelessWidget {
-  final String day;
-  final String date;
-  final bool selected;
-
-  const _dateItem(this.day, this.date, this.selected);
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-    final surface = Theme.of(context).colorScheme.surface;
-
-    return Container(
-      width: 65,
-      margin: const EdgeInsets.only(right: 12),
-      decoration: BoxDecoration(
-        color: selected ? primary : surface,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(day,
-              style: TextStyle(
-                  color: selected ? Colors.white : Colors.grey)),
-          const SizedBox(height: 6),
-          Text(date,
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: selected ? Colors.white : Colors.white)),
-        ],
-      ),
+  void _showFilterSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
+      builder: (context) => const FilterBottomSheet(),
     );
   }
 }
