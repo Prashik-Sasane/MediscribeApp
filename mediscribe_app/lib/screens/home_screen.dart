@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mediscribe_app/screens/appointment.dart';
 import 'package:mediscribe_app/screens/location_screen.dart';
+import 'package:mediscribe_app/features/service/services_screen.dart';
 import 'dart:async';
 
 void main() {
@@ -435,7 +436,20 @@ class _ServiceSection extends StatelessWidget {
             children: [
               const Text("Services",
             style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-              TextButton(onPressed: () {}, child: const Text("See All", style: TextStyle(color: Color(0xFF4D91FF)))),
+             TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ServicesScreen(),
+                  ),
+                );
+              },
+              child: const Text(
+                "See All",
+                style: TextStyle(color: Color(0xFF4D91FF)),
+              ),
+            )
             ],
           ),
         ),
