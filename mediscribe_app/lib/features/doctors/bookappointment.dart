@@ -1,22 +1,41 @@
 import 'package:flutter/material.dart';
+import 'package:mediscribe_app/core/app_state.dart';
+import 'package:mediscribe_app/screens/Appointment.dart';
+import 'package:mediscribe_app/services/doctor_api_service.dart';
 
 class BookingScreen extends StatefulWidget {
-  const BookingScreen({super.key});
+  final NearbyDoctor doctor;
+  const BookingScreen({super.key, required this.doctor});
 
   @override
   State<BookingScreen> createState() => _BookingScreenState();
 }
 
 class _BookingScreenState extends State<BookingScreen> {
-  DateTime selectedDate = DateTime(2026, 1, 15);
+  DateTime selectedDate = DateTime.now().add(const Duration(days: 3));
   String? selectedTime = "11:00";
+  bool _booking = false;
 
   final List<String> times = [
-    "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", 
+    "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
     "12:00", "12:30", "13:00", "13:30", "14:00", "14:30"
   ];
 
   final List<String> unavailableTimes = ["09:30", "12:30"];
+
+  static const List<String> _monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+  static const List<String> _dayNames = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+  ];
+
+  String get _monthName => '${_monthNames[selectedDate.month - 1]} ${selectedDate.year}';
+  String get _dateLabel {
+    final day = _dayNames[selectedDate.weekday - 1];
+    return '$day, ${_monthNames[selectedDate.month - 1]} ${selectedDate.day}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,20 +65,20 @@ class _BookingScreenState extends State<BookingScreen> {
                 ),
                 child: Row(
                   children: [
-                    const CircleAvatar(
+                    CircleAvatar(
                       radius: 30,
-                      backgroundImage: NetworkImage('https://images.unsplash.com/photo-1559839734-2b71f1e3c770?w=100'),
+                      backgroundImage: NetworkImage(widget.doctor.imageUrl),
                     ),
                     const SizedBox(width: 15),
-                    const Column(
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text("Dr. Jenny William", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text("Dentist", style: TextStyle(color: Colors.white38, fontSize: 13)),
+                        Text(widget.doctor.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text(widget.doctor.specialty, style: const TextStyle(color: Colors.white38, fontSize: 13)),
                         Row(
                           children: [
-                            Icon(Icons.star, color: Colors.amber, size: 14),
-                            Text(" 4.9", style: TextStyle(color: Colors.white, fontSize: 12)),
+                            const Icon(Icons.star, color: Colors.amber, size: 14),
+                            Text(" ${widget.doctor.rating.toStringAsFixed(1)}", style: const TextStyle(color: Colors.white, fontSize: 12)),
                           ],
                         ),
                       ],
@@ -70,20 +89,14 @@ class _BookingScreenState extends State<BookingScreen> {
               const SizedBox(height: 25),
 
               // 2. Select Date Section
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text("Select Date", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                  Row(
-                    children: [
-                      const Text("January 2026", style: TextStyle(color: Colors.white70)),
-                      IconButton(onPressed: () {}, icon: const Icon(Icons.chevron_left, color: Colors.white)),
-                      IconButton(onPressed: () {}, icon: const Icon(Icons.chevron_right, color: Colors.white)),
-                    ],
-                  )
-                ],
-              ),
-              _buildCalendarGrid(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text("Select Date", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    Text(_monthName, style: const TextStyle(color: Colors.white70))
+                  ],
+                ),
+                _buildCalendarGrid(),
               const SizedBox(height: 25),
 
               // 3. Select Time Section
@@ -109,41 +122,87 @@ class _BookingScreenState extends State<BookingScreen> {
             minimumSize: const Size(double.infinity, 55),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
           ),
-          onPressed: () {
-            // Navigate to Success or Summary
-          },
-          child: const Text("Continue", style: TextStyle(color: Colors.white, fontSize: 16)),
+          onPressed: _booking ? null : _bookAppointment,
+          child: _booking
+              ? const CircularProgressIndicator(color: Colors.white)
+              : const Text("Confirm Booking", style: TextStyle(color: Colors.white, fontSize: 16)),
         ),
       ),
     );
   }
 
+  Future<void> _bookAppointment() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final appState = AppScope.of(context);
+    setState(() => _booking = true);
+
+    final ok = await appState.bookAppointment(
+      Appointment(
+        doctorId: widget.doctor.id,
+        doctorName: widget.doctor.name,
+        specialty: widget.doctor.specialty,
+        dateLabel: _dateLabel,
+        timeLabel: selectedTime ?? '09:00',
+        type: 'General checkup',
+        location: 'Clinic',
+      ),
+    );
+
+    if (!mounted) return;
+    setState(() => _booking = false);
+
+    if (ok) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Appointment booked successfully!'), backgroundColor: Colors.green),
+      );
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const AppointmentsScreen()),
+        (route) => route.isFirst,
+      );
+    } else {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Booking failed. Please try again.'), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
   Widget _buildCalendarGrid() {
+    final now = DateTime(selectedDate.year, selectedDate.month, 1);
+    final firstWeekday = now.weekday;
+    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: 35, // Mocking a month view
+      itemCount: firstWeekday + daysInMonth,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 7,
         mainAxisSpacing: 10,
         crossAxisSpacing: 10,
       ),
       itemBuilder: (context, index) {
-        int day = index - 3; // Shift to start month properly
-        if (day < 1 || day > 31) return Container();
+        if (index < firstWeekday) return Container();
+        int day = index - firstWeekday + 1;
+        bool isSelected = day == selectedDate.day;
+        bool isPast = DateTime(selectedDate.year, selectedDate.month, day).isBefore(DateTime.now().subtract(const Duration(days: 1)));
 
-        bool isSelected = day == 15;
         return GestureDetector(
-          onTap: () => setState(() => selectedDate = DateTime(2026, 1, day)),
+          onTap: isPast ? null : () => setState(() => selectedDate = DateTime(selectedDate.year, selectedDate.month, day)),
           child: Container(
             decoration: BoxDecoration(
-              color: isSelected ? const Color(0xFF2E7DFF) : const Color(0xFF1E293B),
+              color: isSelected
+                  ? const Color(0xFF2E7DFF)
+                  : (isPast ? Colors.white.withOpacity(0.05) : const Color(0xFF1E293B)),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Center(
               child: Text(
                 "$day",
-                style: TextStyle(color: isSelected ? Colors.white : Colors.white60, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
+                style: TextStyle(
+                  color: isPast ? Colors.white24 : (isSelected ? Colors.white : Colors.white60),
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
               ),
             ),
           ),

@@ -22,15 +22,15 @@ class NearbyDoctor {
   final int fee;
   final double distanceKm;
 
-  factory NearbyDoctor.fromJson(Map<String, dynamic> json) {
+  factory NearbyDoctor.fromMap(Map<String, dynamic> map) {
     return NearbyDoctor(
-      id: (json['id'] ?? '').toString(),
-      name: (json['name'] ?? '').toString(),
-      specialty: (json['specialty'] ?? '').toString(),
-      imageUrl: (json['imageUrl'] ?? '').toString(),
-      rating: ((json['rating'] ?? 0) as num).toDouble(),
-      fee: ((json['fee'] ?? 500) as num).toInt(),
-      distanceKm: ((json['distanceKm'] ?? 0) as num).toDouble(),
+      id: (map['id'] ?? '').toString(),
+      name: (map['name'] ?? '').toString(),
+      specialty: (map['specialty'] ?? '').toString(),
+      imageUrl: (map['imageUrl'] ?? '').toString(),
+      rating: ((map['rating'] ?? 0) as num).toDouble(),
+      fee: ((map['fee'] ?? 500) as num).toInt(),
+      distanceKm: ((map['distanceKm'] ?? 0) as num).toDouble(),
     );
   }
 }
@@ -54,7 +54,7 @@ class DoctorApiService {
       final json = jsonDecode(response.body) as Map<String, dynamic>;
       final doctors = (json['doctors'] as List<dynamic>? ?? []);
       return doctors
-          .map((item) => NearbyDoctor.fromJson(item as Map<String, dynamic>))
+          .map((item) => NearbyDoctor.fromMap(item as Map<String, dynamic>))
           .toList();
     } on SocketException {
       return [];

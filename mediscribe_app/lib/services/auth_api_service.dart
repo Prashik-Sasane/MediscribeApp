@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
-import 'package:mediscribe_app/core/app_state.dart';
 
 class ApiUser {
   ApiUser({
@@ -10,47 +9,55 @@ class ApiUser {
     required this.email,
     required this.city,
     required this.coins,
-    required this.appointments,
+    this.role = 'patient',
+    this.phone = '',
+    this.bloodGroup = '',
+    this.avatarUrl = '',
+    this.specialty = '',
+    this.fee = 0,
+    this.bio = '',
+    this.isOnline = false,
   });
 
   final String name;
   final String email;
   final String city;
   final int coins;
-  final List<Appointment> appointments;
+  final String role;
+  final String phone;
+  final String bloodGroup;
+  final String avatarUrl;
+  final String specialty;
+  final int fee;
+  final String bio;
+  final bool isOnline;
 
   factory ApiUser.fromJson(Map<String, dynamic> json) {
-    final items = (json['appointments'] as List<dynamic>? ?? []);
     return ApiUser(
       name: (json['name'] ?? '').toString(),
       email: (json['email'] ?? '').toString(),
       city: (json['city'] ?? 'Pune').toString(),
-      coins: (json['coins'] ?? 0) as int,
-      appointments: items.map((item) {
-        final map = item as Map<String, dynamic>;
-        return Appointment(
-          doctorName: (map['doctorName'] ?? '').toString(),
-          specialty: (map['specialty'] ?? '').toString(),
-          dateLabel: (map['dateLabel'] ?? '').toString(),
-          timeLabel: (map['timeLabel'] ?? '').toString(),
-          type: (map['type'] ?? '').toString(),
-          location: (map['location'] ?? '').toString(),
-        );
-      }).toList(),
+      coins: ((json['coins'] ?? 0) as num).toInt(),
+      role: (json['role'] ?? 'patient').toString(),
+      phone: (json['phone'] ?? '').toString(),
+      bloodGroup: (json['bloodGroup'] ?? '').toString(),
+      avatarUrl: (json['avatarUrl'] ?? '').toString(),
+      specialty: (json['specialty'] ?? '').toString(),
+      fee: ((json['fee'] ?? 0) as num).toInt(),
+      bio: (json['bio'] ?? '').toString(),
+      isOnline: (json['isOnline'] ?? false) as bool,
     );
   }
 }
 
 class AuthResponse {
   AuthResponse({required this.token, required this.user});
-
   final String token;
   final ApiUser user;
 }
 
 class AuthApiResult {
   AuthApiResult({this.data, this.error});
-
   final AuthResponse? data;
   final String? error;
 }
@@ -79,6 +86,29 @@ class AuthApiService {
     return _authCall(
       endpoint: '/auth/signup',
       body: {'name': name, 'email': email, 'password': password},
+    );
+  }
+
+  static Future<AuthApiResult> doctorLogin({
+    required String email,
+    required String password,
+  }) {
+    return _authCall(
+      endpoint: '/auth/doctor/login',
+      body: {'email': email, 'password': password},
+    );
+  }
+
+  static Future<AuthApiResult> doctorSignup({
+    required String name,
+    required String email,
+    required String password,
+    required String specialty,
+    int fee = 500,
+  }) {
+    return _authCall(
+      endpoint: '/auth/doctor/signup',
+      body: {'name': name, 'email': email, 'password': password, 'specialty': specialty, 'fee': fee},
     );
   }
 

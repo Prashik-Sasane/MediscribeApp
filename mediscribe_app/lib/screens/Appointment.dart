@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mediscribe_app/core/app_state.dart';
 
 class AppointmentsScreen extends StatefulWidget {
   const AppointmentsScreen({super.key});
@@ -14,11 +15,20 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> with TickerProv
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    // Load from backend on first open
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppScope.of(context).loadAppointments();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     const backgroundColor = Color(0xFF0F172A);
+    final appState = AppScope.of(context);
+    final all = appState.appointments;
+    final upcoming  = all.where((a) => a.status == 'upcoming').toList();
+    final completed = all.where((a) => a.status == 'completed').toList();
+    final cancelled = all.where((a) => a.status == 'cancelled').toList();
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -39,7 +49,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> with TickerProv
         children: [
           const SizedBox(height: 10),
           
-          /// 🏷️ CUSTOM TAB BAR
+          /// CUSTOM TAB BAR
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 20),
             decoration: BoxDecoration(
@@ -65,14 +75,14 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> with TickerProv
 
           const SizedBox(height: 20),
 
-          /// 📂 TAB VIEWS
+          /// TAB VIEWS
           Expanded(
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildAppointmentList("upcoming"),
-                _buildAppointmentList("completed"),
-                _buildAppointmentList("cancelled"),
+                _buildList(upcoming,  "upcoming",  appState),
+                _buildList(completed, "completed", appState),
+                _buildList(cancelled, "cancelled", appState),
               ],
             ),
           ),
@@ -81,23 +91,47 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> with TickerProv
     );
   }
 
-  Widget _buildAppointmentList(String status) {
-    // This is where you would normally map your appointments from AppState
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      itemCount: 3,
-      physics: const BouncingScrollPhysics(),
-      itemBuilder: (context, index) {
-        return _AppointmentActionCard(status: status);
-      },
+  Widget _buildList(List<Appointment> items, String status, AppState appState) {
+    if (items.isEmpty) {
+      return Center(
+        child: Text(
+          'No $status appointments',
+          style: const TextStyle(color: Colors.white38),
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: () => appState.loadAppointments(),
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: items.length,
+        physics: const BouncingScrollPhysics(),
+        itemBuilder: (context, index) {
+          return _AppointmentActionCard(
+            appointment: items[index],
+            onCancel: status == 'upcoming'
+                ? () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    final ok = await appState.cancelAppointment(items[index].id);
+                    messenger.showSnackBar(SnackBar(
+                      content: Text(ok ? 'Appointment cancelled' : 'Failed to cancel'),
+                    ));
+                  }
+                : null,
+          );
+        },
+      ),
     );
   }
 }
 
-/// 📇 INDIVIDUAL APPOINTMENT CARD
+/// INDIVIDUAL APPOINTMENT CARD
 class _AppointmentActionCard extends StatelessWidget {
-  final String status;
-  const _AppointmentActionCard({required this.status});
+  final Appointment appointment;
+  final VoidCallback? onCancel;
+  const _AppointmentActionCard({required this.appointment, this.onCancel});
+
+  String get status => appointment.status;
 
   @override
   Widget build(BuildContext context) {
@@ -117,10 +151,15 @@ class _AppointmentActionCard extends StatelessWidget {
               ClipRRect(
                 borderRadius: BorderRadius.circular(16),
                 child: Image.network(
-                  "https://i.pravatar.cc/150?u=$status",
+                  "https://i.pravatar.cc/150?u=${appointment.doctorId}",
                   width: 80,
                   height: 80,
                   fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    width: 80, height: 80,
+                    color: const Color(0xFF1E293B),
+                    child: const Icon(Icons.person, color: Colors.white38, size: 40),
+                  ),
                 ),
               ),
               const SizedBox(width: 16),
@@ -128,14 +167,14 @@ class _AppointmentActionCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("Dr. James Chen", 
-                        style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+                    Text(appointment.doctorName,
+                        style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
-                    Text("Radiologist Specialist", 
+                    Text(appointment.specialty,
                         style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13)),
                     const SizedBox(height: 8),
                     Row(
-                      children: List.generate(5, (i) => Icon(Icons.star_rounded, 
+                      children: List.generate(5, (i) => Icon(Icons.star_rounded,
                           color: i < 4 ? Colors.amber : Colors.white24, size: 16)),
                     ),
                   ],
@@ -147,19 +186,33 @@ class _AppointmentActionCard extends StatelessWidget {
           const Divider(color: Colors.white10, height: 1),
           const SizedBox(height: 16),
           
-          /// 📅 DATE & TIME ROW
+          /// DATE & TIME ROW
           Row(
             children: [
               Icon(Icons.calendar_today_rounded, color: Colors.white38, size: 16),
               const SizedBox(width: 8),
-              const Text("Dec 10, 2025 | 10:00 AM", 
-                  style: TextStyle(color: Colors.white70, fontSize: 13)),
+              Text("${appointment.dateLabel} | ${appointment.timeLabel}",
+                  style: const TextStyle(color: Colors.white70, fontSize: 13)),
             ],
           ),
           
+          if (appointment.prescriptionText.isNotEmpty) ...
+            [
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.04),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(appointment.prescriptionText,
+                    style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              ),
+            ],
+          
           const SizedBox(height: 20),
 
-          /// 🔘 DYNAMIC BUTTONS BASED ON STATUS
+          /// DYNAMIC BUTTONS BASED ON STATUS
           _buildActionButtons(context),
         ],
       ),
@@ -170,30 +223,30 @@ class _AppointmentActionCard extends StatelessWidget {
     if (status == "upcoming") {
       return Row(
         children: [
-          Expanded(child: _outlineButton("Cancel Appointment", Colors.redAccent)),
+          Expanded(child: _outlineButton("Cancel Appointment", Colors.redAccent, onCancel)),
           const SizedBox(width: 12),
-          Expanded(child: _filledButton("Reschedule", const Color(0xFF2E7DFF))),
+          Expanded(child: _filledButton("Reschedule", const Color(0xFF2E7DFF), null)),
         ],
       );
     } else if (status == "completed") {
       return Row(
         children: [
-          Expanded(child: _outlineButton("Rebook", const Color(0xFF2E7DFF))),
+          Expanded(child: _outlineButton("Rebook", const Color(0xFF2E7DFF), null)),
           const SizedBox(width: 12),
-          Expanded(child: _filledButton("View E-Receipt", const Color(0xFF2E7DFF))),
+          Expanded(child: _filledButton("View E-Receipt", const Color(0xFF2E7DFF), null)),
         ],
       );
     } else {
       return SizedBox(
         width: double.infinity,
-        child: _filledButton("Rebook Now", const Color(0xFF2E7DFF)),
+        child: _filledButton("Rebook Now", const Color(0xFF2E7DFF), null),
       );
     }
   }
 
-  Widget _filledButton(String label, Color color) {
+  Widget _filledButton(String label, Color color, VoidCallback? onTap) {
     return ElevatedButton(
-      onPressed: () {},
+      onPressed: onTap,
       style: ElevatedButton.styleFrom(
         backgroundColor: color,
         foregroundColor: Colors.white,
@@ -205,9 +258,9 @@ class _AppointmentActionCard extends StatelessWidget {
     );
   }
 
-  Widget _outlineButton(String label, Color color) {
+  Widget _outlineButton(String label, Color color, VoidCallback? onTap) {
     return OutlinedButton(
-      onPressed: () {},
+      onPressed: onTap,
       style: OutlinedButton.styleFrom(
         side: BorderSide(color: color.withOpacity(0.5)),
         foregroundColor: color,

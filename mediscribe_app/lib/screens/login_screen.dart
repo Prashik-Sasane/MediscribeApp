@@ -16,30 +16,52 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _specialtyController = TextEditingController();
   String? _errorText;
   bool _isSignup = false;
+  bool _isDoctor = false; // Patient / Doctor toggle
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _specialtyController.dispose();
     super.dispose();
   }
 
   Future<void> _login(BuildContext context) async {
     final appState = AppScope.of(context);
     setState(() => _errorText = null);
-    final success = _isSignup
-        ? await appState.signup(
-            name: _nameController.text.trim(),
-            email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
-          )
-        : await appState.login(
-            email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
-          );
+
+    bool success;
+    if (_isDoctor) {
+      if (_isSignup) {
+        success = await appState.doctorSignup(
+          name: _nameController.text.trim(),
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+          specialty: _specialtyController.text.trim(),
+        );
+      } else {
+        success = await appState.doctorLogin(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+      }
+    } else {
+      success = _isSignup
+          ? await appState.signup(
+              name: _nameController.text.trim(),
+              email: _emailController.text.trim(),
+              password: _passwordController.text.trim(),
+            )
+          : await appState.login(
+              email: _emailController.text.trim(),
+              password: _passwordController.text.trim(),
+            );
+    }
+
     if (!success) {
       setState(() {
         _errorText = appState.authError ??
@@ -47,6 +69,7 @@ class _LoginScreenState extends State<LoginScreen> {
       });
       return;
     }
+    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => const MainNavigation()),
@@ -72,15 +95,66 @@ class _LoginScreenState extends State<LoginScreen> {
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
+                const SizedBox(height: 24),
 
-                const SizedBox(height: 40),
+                // Role toggle
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _isDoctor = false),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: !_isDoctor ? const Color(0xFF2E7DFF) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Center(
+                              child: Text('Patient',
+                                  style: TextStyle(
+                                    color: !_isDoctor ? Colors.white : Colors.white54,
+                                    fontWeight: FontWeight.bold,
+                                  )),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _isDoctor = true),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: _isDoctor ? const Color(0xFF2E7DFF) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Center(
+                              child: Text('Doctor',
+                                  style: TextStyle(
+                                    color: _isDoctor ? Colors.white : Colors.white54,
+                                    fontWeight: FontWeight.bold,
+                                  )),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
-                /// 🇮🇳 Indian Welcome Animation
+                const SizedBox(height: 24),
+
+                // Indian Welcome Animation
                 const IndianWelcomeSection(),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: 24),
 
-                /// LOGIN CARD
+                // LOGIN CARD
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 420),
                   child: Container(
@@ -92,10 +166,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-
-                        const Text(
-                          "Welcome back 👋",
-                          style: TextStyle(
+                        Text(
+                          _isDoctor
+                              ? (_isSignup ? "Doctor Registration" : "Doctor Login")
+                              : "Welcome back 👋",
+                          style: const TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
                             color: AppColors.textPrimary,
@@ -104,16 +179,30 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 6),
                         Text(
                           _isSignup ? "Create your account" : "Login to continue",
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                          ),
+                          style: const TextStyle(color: AppColors.textSecondary),
                         ),
 
-                        const SizedBox(height: 30),
+                        const SizedBox(height: 24),
+
+                        if (_isSignup && _isDoctor) ...[
+                          const Text("Specialty", style: TextStyle(color: AppColors.textSecondary)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _specialtyController,
+                            decoration: InputDecoration(
+                              hintText: "e.g. Cardiology, Dentist",
+                              filled: true,
+                              fillColor: const Color(0xFF0F172A),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
 
                         if (_isSignup) ...[
-                          const Text("Full Name",
-                              style: TextStyle(color: AppColors.textSecondary)),
+                          const Text("Full Name", style: TextStyle(color: AppColors.textSecondary)),
                           const SizedBox(height: 6),
                           TextField(
                             controller: _nameController,
@@ -126,13 +215,10 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 16),
                         ],
 
-                        /// EMAIL FIELD
-                        const Text("Email",
-                            style: TextStyle(
-                                color: AppColors.textSecondary)),
+                        const Text("Email", style: TextStyle(color: AppColors.textSecondary)),
                         const SizedBox(height: 6),
                         TextField(
                           controller: _emailController,
@@ -146,12 +232,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
 
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 16),
 
-                        /// PASSWORD FIELD
-                        const Text("Password",
-                            style: TextStyle(
-                                color: AppColors.textSecondary)),
+                        const Text("Password", style: TextStyle(color: AppColors.textSecondary)),
                         const SizedBox(height: 6),
                         TextField(
                           controller: _passwordController,
@@ -166,9 +249,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
 
-                        const SizedBox(height: 30),
+                        const SizedBox(height: 24),
 
-                        /// LOGIN BUTTON
                         PrimaryButton(
                           text: appState.authLoading
                               ? "Please wait..."
@@ -178,15 +260,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         if (_errorText != null) ...[
                           const SizedBox(height: 10),
-                          Text(
-                            _errorText!,
-                            style: const TextStyle(color: Colors.redAccent),
-                          ),
+                          Text(_errorText!, style: const TextStyle(color: Colors.redAccent)),
                         ],
 
-                        const SizedBox(height: 25),
+                        const SizedBox(height: 20),
 
-                        /// OR DIVIDER
                         Row(
                           children: const [
                             Expanded(child: Divider()),
@@ -198,9 +276,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
 
-                        const SizedBox(height: 25),
+                        const SizedBox(height: 20),
 
-                        /// GOOGLE LOGIN BUTTON (UI only)
                         OutlinedButton.icon(
                           onPressed: () => _quickGoogleLogin(context),
                           icon: const Icon(Icons.g_mobiledata, size: 28),
@@ -214,9 +291,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
 
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 16),
 
-                        /// SIGNUP TEXT
                         Center(
                           child: TextButton(
                             onPressed: () {
@@ -229,9 +305,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               _isSignup
                                   ? "Already have an account? Login"
                                   : "Don't have an account? Sign Up",
-                              style: const TextStyle(
-                                color: AppColors.textSecondary,
-                              ),
+                              style: const TextStyle(color: AppColors.textSecondary),
                             ),
                           ),
                         ),

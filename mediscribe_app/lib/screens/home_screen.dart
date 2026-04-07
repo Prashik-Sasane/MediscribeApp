@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:mediscribe_app/core/app_state.dart';
 import 'package:mediscribe_app/screens/appointment.dart';
 import 'package:mediscribe_app/screens/location_screen.dart';
 import 'package:mediscribe_app/features/service/services_screen.dart';
+import 'package:mediscribe_app/features/doctors/doctor_detail_screen.dart';
+import 'package:mediscribe_app/services/location_service.dart';
+import 'package:mediscribe_app/services/doctor_api_service.dart';
 import 'dart:async';
 
 void main() {
@@ -36,7 +41,18 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentAppointmentIndex = 0;
   Timer? _autoScrollTimer;
 
-  // Mock Data aligned with visual design
+  // Search state
+  final TextEditingController _searchController = TextEditingController();
+  List<PlaceResult> _searchResults = [];
+  bool _searching = false;
+  Timer? _searchDebounce;
+
+  // Location & Nearby doctors
+  bool _locationLoading = true;
+  List<NearbyDoctor> _nearbyDoctors = [];
+  String _currentLocation = 'Detecting location...';
+
+  // Fallback mock data (shown when not logged in / no appointments loaded)
   final List<Map<String, String>> _mockAppointments = [
     {
       "name": "Dr. Jenny William",
@@ -64,16 +80,86 @@ class _HomeScreenState extends State<HomeScreen> {
     },
   ];
 
+  List<Map<String, String>> _buildDisplayAppointments(List<Appointment> apiAppts) {
+    if (apiAppts.isEmpty) return _mockAppointments;
+    return apiAppts
+        .where((a) => a.status == 'upcoming')
+        .take(5)
+        .map((a) => {
+              "name": a.doctorName,
+              "specialty": a.specialty,
+              "rating": "4.8",
+              "date": a.dateLabel,
+              "time": a.timeLabel,
+              "imageUrl": "https://i.pravatar.cc/150?u=${a.doctorId}",
+            })
+        .toList()
+        .cast<Map<String, String>>();
+  }
+
   @override
   void initState() {
     super.initState();
     _pageController = PageController(viewportFraction: 0.9);
     _startAutoScroll();
+    _initLocation();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppScope.of(context).loadAppointments();
+    });
+  }
+
+  Future<void> _initLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) return;
+      }
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      final city = AppScope.of(context).currentUser?.city ?? 'My Location';
+      if (!mounted) return;
+      setState(() {
+        _currentLocation = city;
+      });
+      _loadNearbyDoctors(position.latitude, position.longitude);
+    } catch (_) {}
+  }
+
+  Future<void> _loadNearbyDoctors(double lat, double lng) async {
+    final doctors = await DoctorApiService.getNearbyDoctors(lat: lat, lng: lng);
+    if (mounted) setState(() {
+      _nearbyDoctors = doctors;
+      _locationLoading = false;
+    });
+  }
+
+  void _onSearchChanged(String query) {
+    _searchDebounce?.cancel();
+    if (query.length < 2) {
+      if (!mounted) return;
+      setState(() => _searchResults = []);
+      return;
+    }
+    _searchDebounce = Timer(const Duration(milliseconds: 500), () async {
+      setState(() => _searching = true);
+      final results = await LocationService.searchPlaces(query);
+      if (!mounted) return;
+      setState(() {
+        _searchResults = results;
+        _searching = false;
+      });
+    });
   }
 
   @override
   void dispose() {
     _autoScrollTimer?.cancel();
+    _searchDebounce?.cancel();
+    _searchController.dispose();
     _pageController.dispose();
     super.dispose();
   }
@@ -81,7 +167,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _startAutoScroll() {
     _autoScrollTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (_pageController.hasClients) {
-        _currentAppointmentIndex = (_currentAppointmentIndex + 1) % _mockAppointments.length;
+        final total = _mockAppointments.length;
+        _currentAppointmentIndex = (_currentAppointmentIndex + 1) % (total > 0 ? total : 1);
         _pageController.animateToPage(
           _currentAppointmentIndex,
           duration: const Duration(milliseconds: 600),
@@ -93,15 +180,27 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final appState = AppScope.of(context);
+    final displayAppointments = _buildDisplayAppointments(appState.appointments);
+    final upcomingCount = appState.appointments.where((a) => a.status == 'upcoming').length;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A), // The base dark color
-      // 1. Blue Header Container (Matches visual exactly)
+      backgroundColor: const Color(0xFF0F172A),
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(170), // Height for location + search
+        preferredSize: const Size.fromHeight(170),
         child: Container(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-          color: const Color(0xFF2E7DFF), // The bright blue background
-          child: const SafeArea(child: _ModernHeader()),
+          color: const Color(0xFF2E7DFF),
+          child: SafeArea(
+            child: _ModernHeader(
+              city: _currentLocation,
+              upcomingCount: upcomingCount,
+              searchController: _searchController,
+              searchResults: _searchResults,
+              searching: _searching,
+              onSearchChanged: _onSearchChanged,
+            ),
+          ),
         ),
       ),
       body: SingleChildScrollView(
@@ -111,24 +210,23 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             const SizedBox(height: 16),
 
-            // 2. Upcoming Appointments (Redesigned visual)
             _UpcomingAppointmentsSlider(
               controller: _pageController,
               currentIndex: _currentAppointmentIndex,
-              appointments: _mockAppointments,
+              appointments: displayAppointments,
             ),
             const SizedBox(height: 28),
 
-            // 3. Dot Indicator for PageView
-            _buildDotIndicator(),
+            _buildDotIndicator(displayAppointments),
             const SizedBox(height: 28),
 
-            // 4. Services Section with custom visual chips
             const _ServiceSection(),
             const SizedBox(height: 32),
 
-            // 5. Nearby Doctors Section
-            const _NearbyHospitalsSection(),
+            _NearbyDoctorsSection(
+              doctors: _nearbyDoctors,
+              loading: _locationLoading,
+            ),
             const SizedBox(height: 40),
           ],
         ),
@@ -136,11 +234,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildDotIndicator() {
+  Widget _buildDotIndicator(List<Map<String, String>> appointments) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(
-        _mockAppointments.length,
+        appointments.length,
         (index) => AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -157,7 +255,21 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _ModernHeader extends StatelessWidget {
-  const _ModernHeader();
+  final String city;
+  final int upcomingCount;
+  final TextEditingController searchController;
+  final List<PlaceResult> searchResults;
+  final bool searching;
+  final Function(String) onSearchChanged;
+
+  const _ModernHeader({
+    required this.city,
+    required this.upcomingCount,
+    required this.searchController,
+    required this.searchResults,
+    required this.searching,
+    required this.onSearchChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -173,17 +285,25 @@ class _ModernHeader extends StatelessWidget {
                   "Location",
                   style: TextStyle(color: Colors.white60, fontSize: 13),
                 ),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on, color: Colors.orangeAccent, size: 20),
-                    const SizedBox(width: 6),
-                    const Text(
-                      "New York, USA",
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
-                    ),
-                    const SizedBox(width: 6),
-                    const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white70, size: 18),
-                  ],
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ExploreMapScreen()),
+                    );
+                  },
+                  child: Row(
+                    children: [
+                      const Icon(Icons.location_on, color: Colors.orangeAccent, size: 20),
+                      const SizedBox(width: 6),
+                      Text(
+                        city,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white70, size: 18),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -196,35 +316,85 @@ class _ModernHeader extends StatelessWidget {
               child: Stack(
                 children: [
                   const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 24),
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
-                    ),
-                  )
+                  if (upcomingCount > 0)
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
+                        constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                        child: Text(
+                          '$upcomingCount',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    )
                 ],
               ),
             ),
           ],
         ),
         const SizedBox(height: 25),
-        // Search bar moved into header container
-        Container(
-          height: 55,
-          child: const TextField(
-            style: TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              hintText: "Search",
-              hintStyle: TextStyle(color: Colors.white38, fontSize: 15),
-              prefixIcon: Icon(Icons.search_rounded, color: Colors.white54),
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(vertical: 15),
-              suffixIcon: Icon(Icons.tune_rounded, color: Colors.white54), // Best icon for settings/filter
+        // Search bar with dropdown
+        Column(
+          children: [
+            Container(
+              height: 55,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: TextField(
+                controller: searchController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: "Search doctors, clinics, locations...",
+                  hintStyle: const TextStyle(color: Colors.white38, fontSize: 14),
+                  prefixIcon: const Icon(Icons.search_rounded, color: Colors.white54),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 15),
+                  suffixIcon: searching
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54)),
+                        )
+                      : const Icon(Icons.tune_rounded, color: Colors.white54),
+                ),
+                onChanged: onSearchChanged,
+              ),
             ),
-          ),
+            if (searchResults.isNotEmpty) ...[
+              Container(
+                constraints: const BoxConstraints(maxHeight: 200),
+                margin: const EdgeInsets.only(top: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: searchResults.length,
+                  itemBuilder: (context, index) {
+                    final place = searchResults[index];
+                    return ListTile(
+                      leading: const Icon(Icons.location_on_outlined, color: Color(0xFF2E7DFF)),
+                      title: Text(place.displayName, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                      subtitle: Text(place.address, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                      onTap: () {
+                        searchController.text = place.displayName;
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const ExploreMapScreen()),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ],
         ),
       ],
     );
@@ -259,30 +429,28 @@ class _UpcomingAppointmentsSlider extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: const BoxDecoration(color: Color(0xFF4D91FF), shape: BoxShape.circle),
-                    child: const Text("3", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                    child: Text("${appointments.length}",
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
                   )
                 ],
               ),
               TextButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const AppointmentsScreen(),
-                  ),
-                );
-              },
-              child: const Text(
-                "See All",
-                style: TextStyle(color: Color(0xFF4D91FF)),
-              ),
-            )
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AppointmentsScreen(),
+                    ),
+                  );
+                },
+                child: const Text("See All", style: TextStyle(color: Color(0xFF4D91FF))),
+              )
             ],
           ),
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 190, // Taller for the bottom banner logic
+          height: 190,
           child: PageView.builder(
             controller: controller,
             itemCount: appointments.length,
@@ -291,12 +459,11 @@ class _UpcomingAppointmentsSlider extends StatelessWidget {
               return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B), // Dark card background
+                  color: const Color(0xFF1E293B),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Column(
                   children: [
-                    // Main card content
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
@@ -337,7 +504,6 @@ class _UpcomingAppointmentsSlider extends StatelessWidget {
                         ),
                       ),
                     ),
-                    // Visual-first bottom blue banner (Identical to image)
                     Container(
                       height: 55,
                       width: double.infinity,
@@ -489,32 +655,14 @@ class _ServiceSection extends StatelessWidget {
   }
 }
 
-class _NearbyHospitalsSection extends StatelessWidget {
-  const _NearbyHospitalsSection();
+class _NearbyDoctorsSection extends StatelessWidget {
+  final List<NearbyDoctor> doctors;
+  final bool loading;
+
+  const _NearbyDoctorsSection({required this.doctors, required this.loading});
 
   @override
   Widget build(BuildContext context) {
-    final doctors = [
-      {
-        "name": "City Medical Center",
-        "rating": "4.8",
-        "distance": "1.2 km",
-        "imageUrl": "https://images.pexels.com/photos/7578808/pexels-photo-7578808.jpeg?auto=compress&cs=tinysrgb&w=360",
-      },
-      {
-        "name": "Neuro Specialty",
-        "rating": "4.7",
-        "distance": "0.9 km",
-        "imageUrl": "https://images.pexels.com/photos/7578796/pexels-photo-7578796.jpeg?auto=compress&cs=tinysrgb&w=360",
-      },
-      {
-        "name": "Heart Care Hospital",
-        "rating": "4.6",
-        "distance": "2.1 km",
-        "imageUrl": "https://images.pexels.com/photos/15694269/pexels-photo-15694269.jpeg?auto=compress&cs=tinysrgb&w=360",
-      },
-    ];
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -523,109 +671,133 @@ class _NearbyHospitalsSection extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("Nearby Doctors", // User-specific visual prompt
+              const Text("Nearby Doctors",
                   style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-               TextButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ExploreMapScreen(),
-                  ),
-                );
-              },
-              child: const Text(
-                "See All",
-                style: TextStyle(color: Color(0xFF4D91FF)),
-              ),
-            )
-              ],
+              TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const ExploreMapScreen()),
+                  );
+                },
+                child: const Text("See All", style: TextStyle(color: Color(0xFF4D91FF))),
+              )
+            ],
           ),
         ),
         const SizedBox(height: 16),
-        SizedBox(
-          height: 240, // Increased height for visual-first card logic
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            scrollDirection: Axis.horizontal,
-            itemCount: doctors.length,
-            itemBuilder: (context, index) {
-              final doctor = doctors[index];
-              return Container(
-                width: 280, // Wider visual cards
-                margin: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(16),
+        loading
+            ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.only(top: 20),
+                  child: CircularProgressIndicator(color: Color(0xFF2E7DFF)),
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Stack(
-                    children: [
-                      // Full image in background (as visual priority)
-                      Image.network(
-                        doctor['imageUrl']!,
-                        height: double.infinity,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (c, e, s) => Container(color: Colors.white12, child: const Icon(Icons.apartment_rounded, size: 80)),
-                      ),
-                      // Gradient Overlay for text readability
-                      Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.transparent,
-                              Colors.black.withOpacity(0.8),
-                            ],
+              )
+            : doctors.isEmpty
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 20),
+                      child: Text("No doctors found nearby.", style: TextStyle(color: Colors.white38)),
+                    ),
+                  )
+                : SizedBox(
+                    height: 240,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      scrollDirection: Axis.horizontal,
+                      itemCount: doctors.length,
+                      itemBuilder: (context, index) {
+                        final doctor = doctors[index];
+                        return GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => DoctorDetailScreen(doctor: doctor),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            width: 280,
+                            margin: const EdgeInsets.symmetric(horizontal: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E293B),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: Stack(
+                                children: [
+                                  Image.network(
+                                    doctor.imageUrl,
+                                    height: double.infinity,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (c, e, s) => Container(
+                                      color: Colors.white12,
+                                      child: const Icon(Icons.person, size: 80),
+                                    ),
+                                  ),
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Colors.transparent,
+                                          Colors.black.withOpacity(0.8),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(20),
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          doctor.name,
+                                          style: const TextStyle(
+                                              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.star_rounded, color: Colors.amber, size: 18),
+                                            const SizedBox(width: 4),
+                                            Text("${doctor.rating}",
+                                                style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                                            const Spacer(),
+                                            Icon(Icons.location_on_outlined,
+                                                color: Colors.white.withOpacity(0.8), size: 18),
+                                            const SizedBox(width: 4),
+                                            Text("${doctor.distanceKm.toStringAsFixed(1)} km",
+                                                style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: 20,
+                                    right: 20,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: const BoxDecoration(
+                                          color: Colors.white12, shape: BoxShape.circle),
+                                      child: const Icon(Icons.favorite_rounded,
+                                          color: Colors.redAccent, size: 20),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                      // Text content in the area matching the design
-                      Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              doctor['name']!,
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17),
-                            ),
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                const Icon(Icons.star_rounded, color: Colors.amber, size: 18),
-                                const SizedBox(width: 4),
-                                Text("${doctor['rating']!}", style: const TextStyle(color: Colors.white70, fontSize: 14)),
-                                const Spacer(),
-                                Icon(Icons.location_on_outlined, color: Colors.white.withOpacity(0.8), size: 18),
-                                const SizedBox(width: 4),
-                                Text(doctor['distance']!, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Favorite button indicator
-                      Positioned(
-                        top: 20,
-                        right: 20,
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: const BoxDecoration(color: Colors.white12, shape: BoxShape.circle),
-                          child: const Icon(Icons.favorite_rounded, color: Colors.redAccent, size: 20),
-                        ),
-                      ),
-                    ],
+                        );
+                      },
+                    ),
                   ),
-                ),
-              );
-            },
-          ),
-        ),
       ],
     );
   }

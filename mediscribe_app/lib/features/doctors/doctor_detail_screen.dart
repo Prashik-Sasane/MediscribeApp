@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:mediscribe_app/screens/appointment.dart';
 import 'package:mediscribe_app/features/doctors/bookappointment.dart';
+import 'package:mediscribe_app/services/doctor_api_service.dart';
+
 class DoctorDetailScreen extends StatelessWidget {
-  const DoctorDetailScreen({super.key});
+  final NearbyDoctor doctor;
+  const DoctorDetailScreen({super.key, required this.doctor});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A), // Dark Navy
+      backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -24,47 +26,73 @@ class DoctorDetailScreen extends StatelessWidget {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Doctor Image & Basic Info
-            const CircleAvatar(
+            CircleAvatar(
               radius: 80,
-              backgroundImage: NetworkImage('https://images.unsplash.com/photo-1559839734-2b71f1e3c770?w=400'),
+              backgroundImage: NetworkImage(doctor.imageUrl),
             ),
             const SizedBox(height: 16),
-            const Text("Dr. Jenny William", 
-              style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-            const Text("Dentist", style: TextStyle(color: Colors.white54, fontSize: 16)),
-            
-            // Stats Row (Patients, Experience, Rating, Reviews)
+            Text(doctor.name,
+              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+            Text(doctor.specialty, style: const TextStyle(color: Colors.white54, fontSize: 16)),
+
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 25, horizontal: 20),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildStatItem(Icons.people_alt_outlined, "3,500+", "Patients"),
-                  _buildStatItem(Icons.work_outline, "6+", "Years Exp."),
-                  _buildStatItem(Icons.star_outline, "4.9+", "Rating"),
-                  _buildStatItem(Icons.chat_bubble_outline, "5,000+", "Reviews"),
+                  _buildStatItem(Icons.people_alt_outlined, "Consultations", "${(doctor.rating * 200).toInt()}+"),
+                  _buildStatItem(Icons.work_outline, "Years Exp.", "5+"),
+                  _buildStatItem(Icons.star_outline, "Rating", "${doctor.rating.toStringAsFixed(1)}"),
+                  _buildStatItem(Icons.chat_bubble_outline, "Reviews", "${(doctor.rating * 300).toInt()}+"),
                 ],
               ),
             ),
 
-            // About Doctor Section
             _buildSectionHeader("About Doctor"),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Text(
-                "Dr. Jenny William is an experienced dentist with over 6 years of practice. She specializes in advanced dental procedures and patient-focused care.",
-                style: TextStyle(color: Colors.white70, height: 1.5),
+                "Experienced ${doctor.specialty.toLowerCase()} with a patient-focused approach. Offers consultations at ₹${doctor.fee} per visit.",
+                style: const TextStyle(color: Colors.white70, height: 1.5),
               ),
             ),
 
-            // Doctor Contact
+            _buildSectionHeader("Consultation Fee"),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      "₹${doctor.fee}",
+                      style: const TextStyle(color: Color(0xFF2E7DFF), fontSize: 24, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      "Distance: ${doctor.distanceKm.toStringAsFixed(1)} km away",
+                      style: const TextStyle(color: Colors.white54, fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             _buildSectionHeader("Doctor Contact"),
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-              leading: const CircleAvatar(backgroundColor: Color(0xFF1E293B), child: Icon(Icons.person, color: Colors.white)),
-              title: const Text("Dr. Jenny William", style: TextStyle(color: Colors.white)),
-              subtitle: const Text("Dentist", style: TextStyle(color: Colors.white38)),
+              leading: CircleAvatar(
+                backgroundImage: NetworkImage(doctor.imageUrl),
+                backgroundColor: const Color(0xFF1E293B),
+              ),
+              title: Text(doctor.name, style: const TextStyle(color: Colors.white)),
+              subtitle: Text(doctor.specialty, style: const TextStyle(color: Colors.white38)),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -74,8 +102,8 @@ class DoctorDetailScreen extends StatelessWidget {
                 ],
               ),
             ),
-            
-            const SizedBox(height: 100), // Space for bottom button
+
+            const SizedBox(height: 100),
           ],
         ),
       ),
@@ -88,16 +116,19 @@ class DoctorDetailScreen extends StatelessWidget {
             minimumSize: const Size(double.infinity, 55),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
           ),
-            onPressed: () {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const BookingScreen()));
-            },
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => BookingScreen(doctor: doctor)),
+            );
+          },
           child: const Text("Book Appointment", style: TextStyle(fontSize: 16, color: Colors.white)),
         ),
       ),
     );
   }
 
-  Widget _buildStatItem(IconData icon, String value, String label) {
+  Widget _buildStatItem(IconData icon, String label, String value) {
     return Column(
       children: [
         CircleAvatar(
@@ -126,35 +157,6 @@ class DoctorDetailScreen extends StatelessWidget {
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(color: const Color(0xFF1E293B), borderRadius: BorderRadius.circular(10)),
       child: Icon(icon, color: Colors.white, size: 20),
-    );
-  }
-
-  void _showBookingSuccess(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E293B),
-      // shape: const RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(30),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.check_circle, color: Colors.green, size: 80),
-            const SizedBox(height: 20),
-            const Text("Booking Successful!", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            const Text("Your appointment with Dr. Jenny has been scheduled.", textAlign: TextAlign.center, style: TextStyle(color: Colors.white54)),
-            const SizedBox(height: 30),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context); // Close sheet
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const AppointmentsScreen()));
-              },
-              child: const Text("View My Appointments"),
-            )
-          ],
-        ),
-      ),
     );
   }
 }

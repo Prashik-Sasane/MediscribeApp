@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
-
-// Note: I'm using mock data placeholders. 
-// Replace user?.name with your actual appState logic.
+import 'package:mediscribe_app/core/app_state.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final appState = AppScope.of(context);
+    final user = appState.currentUser;
+    final name  = user?.name  ?? 'Jenny William';
+    final email = user?.email ?? 'jenny.william@gmail.com';
+    final appointmentCount = appState.appointments.length;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A), // Deep Slate Blue
+      backgroundColor: const Color(0xFF0F172A),
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -28,12 +32,11 @@ class ProfileScreen extends StatelessWidget {
         physics: const BouncingScrollPhysics(),
         child: Column(
           children: [
-            const SizedBox(height: 110), // Space for AppBar
+            const SizedBox(height: 110),
 
-            /// 👤 PROFILE HEADER
-            const _ProfessionalHeader(
-              name: "Jenny William",
-              email: "jenny.william@gmail.com",
+            _ProfessionalHeader(
+              name: name,
+              email: email,
             ),
 
             const SizedBox(height: 30),
@@ -43,12 +46,10 @@ class ProfileScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  /// ❤️ HEALTH DASHBOARD (Metrics)
-                  const _HealthStatsRow(appointments: 12, orders: 5, reports: 8),
+                  _HealthStatsRow(appointments: appointmentCount, orders: 5, reports: 8),
 
                   const SizedBox(height: 32),
 
-                  /// ⚡ QUICK ACTIONS GRID
                   const Text("Quick Actions",
                       style: TextStyle(
                           color: Colors.white,
@@ -59,12 +60,10 @@ class ProfileScreen extends StatelessWidget {
 
                   const SizedBox(height: 32),
 
-                  /// 💎 PREMIUM UPGRADE CARD
                   const _PremiumCard(),
 
                   const SizedBox(height: 32),
 
-                  /// ⚙️ SETTINGS SECTION
                   const Text("General Settings",
                       style: TextStyle(
                           color: Colors.white,
@@ -79,9 +78,10 @@ class ProfileScreen extends StatelessWidget {
                   ]),
 
                   const SizedBox(height: 24),
-                  
-                  /// 🚪 LOGOUT
-                  _buildMenuTile(Icons.logout_rounded, "Logout", isLogout: true),
+
+                  _buildMenuTile(Icons.logout_rounded, "Logout",
+                      isLogout: true,
+                      onTap: () => appState.logout()),
                   const SizedBox(height: 40),
                 ],
               ),
@@ -106,7 +106,7 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMenuTile(IconData icon, String title, {bool isLogout = false}) {
+  Widget _buildMenuTile(IconData icon, String title, {bool isLogout = false, VoidCallback? onTap}) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
       leading: Container(
@@ -125,7 +125,7 @@ class ProfileScreen extends StatelessWidget {
           )),
       trailing: Icon(Icons.arrow_forward_ios_rounded,
           color: isLogout ? Colors.transparent : Colors.white24, size: 14),
-      onTap: () {},
+      onTap: onTap ?? () {},
     );
   }
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mediscribe_app/features/doctors/doctor_detail_screen.dart';
 import 'package:mediscribe_app/features/doctors/doctor_list_screen.dart';
-
+import 'package:mediscribe_app/services/doctor_api_service.dart';
 class DoctorListScreen extends StatefulWidget {
   const DoctorListScreen({super.key});
 
@@ -91,7 +91,7 @@ class _DoctorListScreenState extends State<DoctorListScreen> {
                     // Navigate to Detail Page (Created in previous step)
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const DoctorDetailScreen()),
+                      MaterialPageRoute(builder: (context) => DoctorDetailScreen( doctor: NearbyDoctor.fromMap(doc),)),
                     );
                   },
                   child: Container(
