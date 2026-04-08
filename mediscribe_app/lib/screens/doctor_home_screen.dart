@@ -409,7 +409,7 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
         builder: (context) => WebRTCCallScreen(
           targetUserId: targetUserId,
           targetName: patientName,
-          targetImageUrl: '',
+          // targetImageUrl: '',
           isIncoming: false,
         ),
       ),

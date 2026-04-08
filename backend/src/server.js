@@ -4,110 +4,118 @@ const { Server } = require("socket.io");
 const app = require("./app");
 const { connectDatabase } = require("./config/db");
 
-const port = Number(process.env.PORT || 5000);
+const PORT = Number(process.env.PORT || 5000);
 
 async function start() {
   await connectDatabase();
-  
-  // Create HTTP server
+
   const server = http.createServer(app);
-  
-  // Setup Socket.io for WebRTC signaling
+
   const io = new Server(server, {
     cors: {
       origin: "*",
-      methods: ["GET", "POST"]
-    }
+      methods: ["GET", "POST"],
+    },
   });
 
-  // Store connected users: userId -> socketId
+  // 🔥 Store users: userId -> socketId
   const connectedUsers = new Map();
 
   io.on("connection", (socket) => {
-    console.log(`User connected: ${socket.id}`);
+    console.log("✅ User connected:", socket.id);
 
-    // User registers with their userId
+    // ================= REGISTER =================
     socket.on("register", (userId) => {
       connectedUsers.set(userId, socket.id);
-      console.log(`User ${userId} registered with socket ${socket.id}`);
       socket.userId = userId;
+
+      // Join room (better scalability)
+      socket.join(userId);
+
+      console.log(`👤 ${userId} registered`);
     });
 
-    // Initiate video call
-    socket.on("call-user", async ({ to, offer, callerName, callerRole }) => {
+    // ================= CALL USER =================
+    socket.on("call-user", ({ to, offer, callerName, callerRole }) => {
       const toSocketId = connectedUsers.get(to);
+
       if (toSocketId) {
-        io.to(toSocketId).emit("incoming-call", {
+        io.to(to).emit("incoming-call", {
           from: socket.userId,
           offer,
           callerName,
-          callerRole
+          callerRole,
         });
-        console.log(`Call initiated from ${socket.userId} to ${to}`);
+
+        console.log(`📞 Call from ${socket.userId} → ${to}`);
       } else {
-        socket.emit("call-error", { message: "User not online" });
-      }
-    });
-
-    // Accept call
-    socket.on("accept-call", async ({ to, answer }) => {
-      const toSocketId = connectedUsers.get(to);
-      if (toSocketId) {
-        io.to(toSocketId).emit("call-accepted", {
-          from: socket.userId,
-          answer
+        socket.emit("call-error", {
+          message: "User is offline",
+          to,
         });
-        console.log(`Call accepted by ${socket.userId}`);
       }
     });
 
-    // Reject call
+    // ================= ACCEPT CALL =================
+    socket.on("accept-call", ({ to, answer }) => {
+      io.to(to).emit("call-accepted", {
+        from: socket.userId,
+        answer,
+      });
+
+      console.log(`✅ Call accepted by ${socket.userId}`);
+    });
+
+    // ================= REJECT CALL =================
     socket.on("reject-call", ({ to }) => {
-      const toSocketId = connectedUsers.get(to);
-      if (toSocketId) {
-        io.to(toSocketId).emit("call-rejected", {
-          from: socket.userId
-        });
-      }
+      io.to(to).emit("call-rejected", {
+        from: socket.userId,
+      });
+
+      console.log(`❌ Call rejected by ${socket.userId}`);
     });
 
-    // Exchange ICE candidates
+    // ================= ICE CANDIDATE =================
     socket.on("ice-candidate", ({ to, candidate }) => {
-      const toSocketId = connectedUsers.get(to);
-      if (toSocketId) {
-        io.to(toSocketId).emit("ice-candidate", {
-          from: socket.userId,
-          candidate
-        });
-      }
+      io.to(to).emit("ice-candidate", {
+        from: socket.userId,
+        candidate,
+      });
+
+      console.log(`🧊 ICE ${socket.userId} → ${to}`);
     });
 
-    // End call
+    // ================= END CALL (FIXED) =================
     socket.on("end-call", ({ to }) => {
-      const toSocketId = connectedUsers.get(to);
-      if (toSocketId) {
-        io.to(toSocketId).emit("call-ended", {
-          from: socket.userId
-        });
-      }
+      io.to(to).emit("end-call", {
+        from: socket.userId,
+      });
+
+      console.log(`📴 Call ended by ${socket.userId}`);
     });
 
-    // User disconnects
+    // ================= DISCONNECT =================
     socket.on("disconnect", () => {
       if (socket.userId) {
         connectedUsers.delete(socket.userId);
-        console.log(`User ${socket.userId} disconnected`);
+        console.log(`🔌 ${socket.userId} disconnected`);
+      } else {
+        console.log(`🔌 Unknown user disconnected`);
       }
     });
   });
 
-  server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}`);
-    console.log(`Socket.io signaling server ready`);
+  // ================= HEALTH CHECK =================
+  app.get("/", (req, res) => {
+    res.send("🚀 Server is running");
+  });
+
+  server.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
   });
 }
 
-start().catch((error) => {
-  console.error("Failed to start server:", error.message);
+start().catch((err) => {
+  console.error("❌ Server failed:", err.message);
   process.exit(1);
 });

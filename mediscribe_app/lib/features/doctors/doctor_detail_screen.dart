@@ -512,7 +512,7 @@ class DoctorDetailScreen extends StatelessWidget {
           builder: (context) => WebRTCCallScreen(
             targetUserId: doctor.email.isNotEmpty ? doctor.email : doctor.id,
             targetName: doctor.name,
-            targetImageUrl: doctor.imageUrl,
+            // targetImageUrl: doctor.imageUrl,
             isIncoming: false,
           ),
         ),

@@ -25,7 +25,7 @@ class IncomingCallService {
     if (currentUserId.isEmpty) return;
 
     // Setup socket connection
-    _socket = IO.io('http://localhost:5000', <String, dynamic>{
+    _socket = IO.io('http://10.222.254.49:5000', <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': true,
     });
@@ -40,7 +40,7 @@ class IncomingCallService {
     _socket!.on('incoming-call', (data) async {
       print('[IncomingCall] Received incoming call from: ${data['callerName']}');
       
-      if (_context != null && Navigator.canPop(_context!)) {
+      if (_context != null) {
         _showIncomingCallDialog(data);
       }
     });
@@ -143,7 +143,7 @@ class IncomingCallService {
         builder: (context) => WebRTCCallScreen(
           targetUserId: data['from'],
           targetName: data['callerName'] ?? 'Unknown',
-          targetImageUrl: '',
+          // targetImageUrl: '',
           isIncoming: true,
           incomingOffer: data['offer'],
         ),

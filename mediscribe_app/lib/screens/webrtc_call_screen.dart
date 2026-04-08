@@ -1,21 +1,19 @@
-import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
-import 'package:mediscribe_app/core/app_state.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class WebRTCCallScreen extends StatefulWidget {
-  final String targetUserId; // Doctor or Patient ID to call
-  final String targetName; // Name to display
-  final String targetImageUrl; // Profile image
-  final bool isIncoming; // true if receiving a call
-  final Map<String, dynamic>? incomingOffer; // SDP offer if incoming call
+  final String targetUserId;
+  final String targetName;
+  final bool isIncoming;
+  final Map<String, dynamic>? incomingOffer;
 
   const WebRTCCallScreen({
     super.key,
     required this.targetUserId,
     required this.targetName,
-    required this.targetImageUrl,
     this.isIncoming = false,
     this.incomingOffer,
   });
@@ -25,27 +23,25 @@ class WebRTCCallScreen extends StatefulWidget {
 }
 
 class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
-  // WebRTC
   late RTCPeerConnection _peerConnection;
 
-  // Media streams
   MediaStream? _localStream;
   MediaStream? _remoteStream;
 
-  // Video renderers
   final _localRenderer = RTCVideoRenderer();
   final _remoteRenderer = RTCVideoRenderer();
 
-  // Socket connection
   late IO.Socket _socket;
 
-  // Call state
   bool _isCallConnected = false;
   bool _isMuted = false;
   bool _isCameraOff = false;
-  bool _isFrontCamera = true;
+
   int _callDuration = 0;
-  String _callStatus = 'Connecting...';
+  Timer? _timer;
+
+  List<RTCIceCandidate> _pendingCandidates = [];
+  bool _remoteDescSet = false;
 
   @override
   void initState() {
@@ -53,423 +49,258 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
     _init();
   }
 
+  // ================= INIT =================
   Future<void> _init() async {
-    // Initialize peer connection
-    _peerConnection = await createPeerConnection({
-      'iceServers': [
-        {'urls': 'stun:stun.l.google.com:19302'},
-        {'urls': 'stun:stun1.l.google.com:19302'},
-      ]
-    });
+    await _requestPermissions();
 
-    // Initialize renderers
     await _localRenderer.initialize();
     await _remoteRenderer.initialize();
 
-    // Setup socket connection
-    _setupSocket();
+    _peerConnection = await createPeerConnection({
+      'iceServers': [
+        {'urls': 'stun:stun.l.google.com:19302'},
+        {
+          'urls': 'turn:openrelay.metered.ca:80',
+          'username': 'openrelayproject',
+          'credential': 'openrelayproject',
+        }
+      ]
+    });
 
-    // Get local media (camera & microphone)
+    _setupPeerConnection();
+    _setupSocket();
     await _getLocalMedia();
 
-    // Setup peer connection listeners
-    _setupPeerConnection();
-
-    // If incoming call, accept it
     if (widget.isIncoming && widget.incomingOffer != null) {
-      await _handleIncomingCall(widget.incomingOffer!);
+      await _handleIncoming(widget.incomingOffer!);
     } else {
-      // Outgoing call - create offer
-      await _makeOutgoingCall();
+      await _startCall();
     }
   }
 
-  void _setupSocket() {
-    final appState = AppScope.of(context);
-    final currentUserId = appState.currentUser?.email ?? '';
-
-    _socket = IO.io('http://localhost:5000', <String, dynamic>{
-      'transports': ['websocket'],
-      'autoConnect': true,
-    });
-
-    _socket.onConnect((_) {
-      print('Socket connected');
-      // Register user
-      _socket.emit('register', currentUserId);
-    });
-
-    // Listen for call events
-    _socket.on('call-accepted', (data) async {
-      print('Call accepted');
-      final answer = RTCSessionDescription(data['answer']['sdp'], data['answer']['type']);
-      await _peerConnection.setRemoteDescription(answer);
-    });
-
-    _socket.on('ice-candidate', (data) async {
-      final candidate = RTCIceCandidate(
-        data['candidate']['candidate'],
-        data['candidate']['sdpMid'],
-        data['candidate']['sdpMLineIndex'],
-      );
-      await _peerConnection.addCandidate(candidate);
-    });
-
-    _socket.on('call-ended', (data) {
-      print('Call ended by remote');
-      if (mounted) {
-        setState(() => _callStatus = 'Call ended');
-        Future.delayed(const Duration(seconds: 1), () {
-          Navigator.pop(context);
-        });
-      }
-    });
-
-    _socket.on('call-rejected', (data) {
-      print('Call rejected');
-      if (mounted) {
-        setState(() => _callStatus = 'Call rejected');
-        Future.delayed(const Duration(seconds: 2), () {
-          Navigator.pop(context);
-        });
-      }
-    });
+  // ================= PERMISSIONS =================
+  Future<void> _requestPermissions() async {
+    await [
+      Permission.camera,
+      Permission.microphone,
+    ].request();
   }
 
+  // ================= LOCAL MEDIA =================
   Future<void> _getLocalMedia() async {
-    try {
-      _localStream = await navigator.mediaDevices.getUserMedia({
-        'audio': true,
-        'video': {
-          'facingMode': _isFrontCamera ? 'user' : 'environment',
-        },
-      });
+    _localStream = await navigator.mediaDevices.getUserMedia({
+      'audio': true,
+      'video': {
+        'facingMode': 'user',
+      }
+    });
 
-      _localRenderer.srcObject = _localStream;
-      setState(() {});
-    } catch (e) {
-      print('Error getting local media: $e');
+    _localRenderer.srcObject = _localStream;
+
+    for (var track in _localStream!.getTracks()) {
+      _peerConnection.addTrack(track, _localStream!);
     }
   }
 
+  // ================= PEER =================
   void _setupPeerConnection() {
-    // Add local stream to peer connection
-    _localStream?.getTracks().forEach((track) {
-      _peerConnection.addTrack(track, _localStream!);
-    });
-
-    // Listen for remote stream
     _peerConnection.onTrack = (event) {
       if (event.streams.isNotEmpty) {
         setState(() {
           _remoteStream = event.streams[0];
           _remoteRenderer.srcObject = _remoteStream;
           _isCallConnected = true;
-          _callStatus = 'Connected';
-          _startCallTimer();
         });
+        _startTimer();
       }
     };
 
-    // Listen for ICE candidates
-    _peerConnection.onIceCandidate = (candidate) {
-      if (candidate.candidate != null) {
+    _peerConnection.onIceCandidate = (c) {
+      if (c.candidate != null) {
         _socket.emit('ice-candidate', {
           'to': widget.targetUserId,
-          'candidate': {
-            'candidate': candidate.candidate,
-            'sdpMid': candidate.sdpMid,
-            'sdpMLineIndex': candidate.sdpMLineIndex,
-          },
+          'candidate': c.toMap(),
         });
       }
     };
   }
 
-  Future<void> _makeOutgoingCall() async {
-    setState(() => _callStatus = 'Ringing...');
-
-    // Create offer
-    final offer = await _peerConnection.createOffer({
-      'offerToReceiveAudio': true,
-      'offerToReceiveVideo': true,
+  // ================= SOCKET =================
+  void _setupSocket() {
+    _socket = IO.io('http://10.222.254.49:5000', {
+      'transports': ['websocket'],
+      'autoConnect': true,
     });
-    await _peerConnection.setLocalDescription(offer);
 
-    // Send offer to remote user
-    final appState = AppScope.of(context);
-    _socket.emit('call-user', {
-      'to': widget.targetUserId,
-      'offer': {'sdp': offer.sdp, 'type': offer.type},
-      'callerName': appState.currentUser?.name ?? 'User',
-      'callerRole': appState.currentUser?.role ?? 'patient',
+    _socket.onConnect((_) {
+      print("Connected to server");
     });
-  }
 
-  Future<void> _handleIncomingCall(Map<String, dynamic> offer) async {
-    setState(() => _callStatus = 'Accepting call...');
+    _socket.on('call-accepted', (data) async {
+      await _peerConnection.setRemoteDescription(
+        RTCSessionDescription(
+          data['answer']['sdp'],
+          data['answer']['type'],
+        ),
+      );
 
-    // Set remote description
-    final remoteDesc = RTCSessionDescription(offer['sdp'], offer['type']);
-    await _peerConnection.setRemoteDescription(remoteDesc);
+      _remoteDescSet = true;
 
-    // Create answer
-    final answer = await _peerConnection.createAnswer({
-      'offerToReceiveAudio': true,
-      'offerToReceiveVideo': true,
+      for (var c in _pendingCandidates) {
+        await _peerConnection.addCandidate(c);
+      }
+      _pendingCandidates.clear();
     });
-    await _peerConnection.setLocalDescription(answer);
 
-    // Send answer back
-    _socket.emit('accept-call', {
-      'to': widget.targetUserId,
-      'answer': {'sdp': answer.sdp, 'type': answer.type},
-    });
-  }
+    _socket.on('ice-candidate', (data) async {
+      final c = RTCIceCandidate(
+        data['candidate']['candidate'],
+        data['candidate']['sdpMid'],
+        data['candidate']['sdpMLineIndex'],
+      );
 
-  void _startCallTimer() {
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted && _isCallConnected) {
-        setState(() => _callDuration++);
-        _startCallTimer();
+      if (_remoteDescSet) {
+        await _peerConnection.addCandidate(c);
+      } else {
+        _pendingCandidates.add(c);
       }
     });
+
+    _socket.on('end-call', (_) {
+      _endLocal();
+    });
   }
 
-  String _formatDuration(int seconds) {
-    final minutes = seconds ~/ 60;
-    final secs = seconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+  // ================= CALL =================
+  Future<void> _startCall() async {
+    final offer = await _peerConnection.createOffer();
+    await _peerConnection.setLocalDescription(offer);
+
+    _socket.emit('call-user', {
+      'to': widget.targetUserId,
+      'offer': offer.toMap(),
+    });
   }
 
-  Future<void> _toggleMute() async {
-    if (_localStream != null) {
-      _localStream!.getAudioTracks().forEach((track) {
-        track.enabled = _isMuted;
-      });
-      setState(() => _isMuted = !_isMuted);
-    }
+  Future<void> _handleIncoming(Map offer) async {
+    await _peerConnection.setRemoteDescription(
+      RTCSessionDescription(offer['sdp'], offer['type']),
+    );
+
+    _remoteDescSet = true;
+
+    final answer = await _peerConnection.createAnswer();
+    await _peerConnection.setLocalDescription(answer);
+
+    _socket.emit('accept-call', {
+      'to': widget.targetUserId,
+      'answer': answer.toMap(),
+    });
   }
 
-  Future<void> _toggleCamera() async {
-    if (_localStream != null) {
-      _localStream!.getVideoTracks().forEach((track) {
-        track.enabled = _isCameraOff;
-      });
-      setState(() => _isCameraOff = !_isCameraOff);
-    }
+  // ================= TIMER =================
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      setState(() => _callDuration++);
+    });
   }
 
-  Future<void> _switchCamera() async {
-    if (_localStream != null) {
-      final videoTrack = _localStream!.getVideoTracks().first;
-      await videoTrack.switchCamera();
-      setState(() => _isFrontCamera = !_isFrontCamera);
-    }
+  String _time() {
+    final m = _callDuration ~/ 60;
+    final s = _callDuration % 60;
+    return "$m:$s";
   }
 
-  Future<void> _endCall() async {
+  // ================= CONTROLS =================
+  void _toggleMute() {
+    _isMuted = !_isMuted;
+    _localStream?.getAudioTracks().forEach((t) => t.enabled = !_isMuted);
+    setState(() {});
+  }
+
+  void _toggleCamera() {
+    _isCameraOff = !_isCameraOff;
+    _localStream?.getVideoTracks().forEach((t) => t.enabled = !_isCameraOff);
+    setState(() {});
+  }
+
+  void _endCall() {
     _socket.emit('end-call', {'to': widget.targetUserId});
-    _cleanup();
-    Navigator.pop(context);
+    _endLocal();
   }
 
-  void _cleanup() {
+  void _endLocal() {
+    _timer?.cancel();
+
     _localStream?.dispose();
     _remoteStream?.dispose();
     _peerConnection.close();
-    _socket.disconnect();
+
+    if (mounted) Navigator.pop(context);
   }
 
   @override
   void dispose() {
-    _cleanup();
+    _endLocal();
     _localRenderer.dispose();
     _remoteRenderer.dispose();
     super.dispose();
   }
 
+  // ================= UI =================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Remote video (full screen)
-          Positioned.fill(
-            child: RTCVideoView(
-              _remoteRenderer,
-              objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-            ),
-          ),
+          RTCVideoView(_remoteRenderer),
 
-          // Local video (picture-in-picture)
           Positioned(
-            top: 60,
-            right: 20,
-            child: Container(
+            top: 40,
+            right: 10,
+            child: SizedBox(
               width: 120,
               height: 160,
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white, width: 2),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.5),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: RTCVideoView(
-                  _localRenderer,
-                  mirror: _isFrontCamera,
-                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                ),
-              ),
+              child: RTCVideoView(_localRenderer, mirror: true),
             ),
           ),
 
-          // Call controls overlay
           Positioned(
-            bottom: 0,
+            bottom: 40,
             left: 0,
             right: 0,
-            child: Container(
-              padding: const EdgeInsets.all(30),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black.withOpacity(0.8),
+            child: Column(
+              children: [
+                Text(_isCallConnected ? _time() : "Connecting...",
+                    style: const TextStyle(color: Colors.white)),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    IconButton(
+                        icon: Icon(_isMuted ? Icons.mic_off : Icons.mic),
+                        color: Colors.white,
+                        onPressed: _toggleMute),
+
+                    IconButton(
+                        icon: Icon(_isCameraOff
+                            ? Icons.videocam_off
+                            : Icons.videocam),
+                        color: Colors.white,
+                        onPressed: _toggleCamera),
+
+                    IconButton(
+                        icon: const Icon(Icons.call_end),
+                        color: Colors.red,
+                        onPressed: _endCall),
                   ],
-                ),
-              ),
-              child: Column(
-                children: [
-                  // Call info
-                  Text(
-                    widget.targetName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _callStatus == 'Connected'
-                        ? _formatDuration(_callDuration)
-                        : _callStatus,
-                    style: TextStyle(
-                      color: _isCallConnected ? Colors.green : Colors.white70,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 30),
-
-                  // Call controls
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Mute button
-                      _ControlButton(
-                        icon: _isMuted ? Icons.mic_off : Icons.mic,
-                        label: _isMuted ? 'Unmute' : 'Mute',
-                        isActive: _isMuted,
-                        onTap: _toggleMute,
-                      ),
-                      const SizedBox(width: 20),
-
-                      // Camera toggle
-                      _ControlButton(
-                        icon: _isCameraOff ? Icons.videocam_off : Icons.videocam,
-                        label: _isCameraOff ? 'Show Video' : 'Hide Video',
-                        isActive: _isCameraOff,
-                        onTap: _toggleCamera,
-                      ),
-                      const SizedBox(width: 20),
-
-                      // Switch camera
-                      _ControlButton(
-                        icon: Icons.switch_camera,
-                        label: 'Switch',
-                        onTap: _switchCamera,
-                      ),
-                      const SizedBox(width: 20),
-
-                      // End call
-                      Container(
-                        width: 70,
-                        height: 70,
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          icon: const Icon(Icons.call_end, color: Colors.white, size: 35),
-                          onPressed: _endCall,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                )
+              ],
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _ControlButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _ControlButton({
-    required this.icon,
-    required this.label,
-    this.isActive = false,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        GestureDetector(
-          onTap: onTap,
-          child: Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: isActive ? Colors.white : Colors.white.withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              icon,
-              color: isActive ? Colors.black : Colors.white,
-              size: 28,
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-          ),
-        ),
-      ],
     );
   }
 }
