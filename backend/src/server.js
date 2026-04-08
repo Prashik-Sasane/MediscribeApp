@@ -18,18 +18,14 @@ async function start() {
     },
   });
 
-  // 🔥 Store users: userId -> socketId
-  const connectedUsers = new Map();
-
   io.on("connection", (socket) => {
     console.log("✅ User connected:", socket.id);
 
     // ================= REGISTER =================
     socket.on("register", (userId) => {
-      connectedUsers.set(userId, socket.id);
-      socket.userId = userId;
+      if (!userId) return;
 
-      // Join room (better scalability)
+      socket.userId = userId;
       socket.join(userId);
 
       console.log(`👤 ${userId} registered`);
@@ -37,46 +33,45 @@ async function start() {
 
     // ================= CALL USER =================
     socket.on("call-user", ({ to, offer, callerName, callerRole }) => {
-      const toSocketId = connectedUsers.get(to);
+      if (!to) return;
 
-      if (toSocketId) {
-        io.to(to).emit("incoming-call", {
-          from: socket.userId,
-          offer,
-          callerName,
-          callerRole,
-        });
+      io.to(to).emit("incoming-call", {
+        from: socket.userId,
+        offer,
+        callerName,
+        callerRole,
+      });
 
-        console.log(`📞 Call from ${socket.userId} → ${to}`);
-      } else {
-        socket.emit("call-error", {
-          message: "User is offline",
-          to,
-        });
-      }
+      console.log(`📞 ${socket.userId} → ${to}`);
     });
 
     // ================= ACCEPT CALL =================
     socket.on("accept-call", ({ to, answer }) => {
+      if (!to) return;
+
       io.to(to).emit("call-accepted", {
         from: socket.userId,
         answer,
       });
 
-      console.log(`✅ Call accepted by ${socket.userId}`);
+      console.log(`✅ Accepted by ${socket.userId}`);
     });
 
     // ================= REJECT CALL =================
     socket.on("reject-call", ({ to }) => {
+      if (!to) return;
+
       io.to(to).emit("call-rejected", {
         from: socket.userId,
       });
 
-      console.log(`❌ Call rejected by ${socket.userId}`);
+      console.log(`❌ Rejected by ${socket.userId}`);
     });
 
-    // ================= ICE CANDIDATE =================
+    // ================= ICE =================
     socket.on("ice-candidate", ({ to, candidate }) => {
+      if (!to) return;
+
       io.to(to).emit("ice-candidate", {
         from: socket.userId,
         candidate,
@@ -85,29 +80,25 @@ async function start() {
       console.log(`🧊 ICE ${socket.userId} → ${to}`);
     });
 
-    // ================= END CALL (FIXED) =================
+    // ================= END CALL =================
     socket.on("end-call", ({ to }) => {
+      if (!to) return;
+
       io.to(to).emit("end-call", {
         from: socket.userId,
       });
 
-      console.log(`📴 Call ended by ${socket.userId}`);
+      console.log(`📴 Ended by ${socket.userId}`);
     });
 
     // ================= DISCONNECT =================
     socket.on("disconnect", () => {
-      if (socket.userId) {
-        connectedUsers.delete(socket.userId);
-        console.log(`🔌 ${socket.userId} disconnected`);
-      } else {
-        console.log(`🔌 Unknown user disconnected`);
-      }
+      console.log(`🔌 ${socket.userId || "Unknown"} disconnected`);
     });
-  });
 
-  // ================= HEALTH CHECK =================
-  app.get("/", (req, res) => {
-    res.send("🚀 Server is running");
+    socket.on("error", (err) => {
+      console.error("Socket error:", err);
+    });
   });
 
   server.listen(PORT, () => {
