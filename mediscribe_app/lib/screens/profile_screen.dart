@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mediscribe_app/core/app_state.dart';
 import 'package:mediscribe_app/screens/admin_login_screen.dart';
+import 'package:mediscribe_app/screens/edit_profile_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -25,7 +26,16 @@ class ProfileScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_outlined, color: Colors.white70),
-            onPressed: () {},
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const EditProfileScreen()),
+              ).then((updated) {
+                if (updated == true) {
+                  // Reload profile if needed
+                }
+              });
+            },
           )
         ],
       ),

@@ -11,6 +11,7 @@ const userSchema = new mongoose.Schema(
     phone: { type: String, default: "" },
     bloodGroup: { type: String, default: "" },
     avatarUrl: { type: String, default: "" },
+    upiId: { type: String, default: "" }, // For receiving payments (doctors)
   },
   { timestamps: true }
 );

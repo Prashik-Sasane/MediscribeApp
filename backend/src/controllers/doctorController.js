@@ -28,6 +28,8 @@ function doctorPublic(doc, distanceKm) {
     isOnline: doc.isOnline,
     isVerified: doc.isVerified,
     licenseNumber: doc.licenseNumber, // Added for admin dashboard
+    phone: doc.phone, // Added for video calls
+    upiId: doc.upiId, // Added for payments
     lat: doc.lat,
     lng: doc.lng,
     availableSlots: doc.availableSlots,

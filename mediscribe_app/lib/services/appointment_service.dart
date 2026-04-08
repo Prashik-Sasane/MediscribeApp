@@ -14,7 +14,9 @@ class ApiAppointment {
     required this.location,
     required this.status,
     this.prescriptionText = '',
+    this.patientId,
     this.patientName,
+    this.patientEmail,
     this.patientPhone,
     this.rating,
     this.review,
@@ -30,7 +32,9 @@ class ApiAppointment {
   final String location;
   final String status;
   final String prescriptionText;
+  final String? patientId;
   final String? patientName;
+  final String? patientEmail;
   final String? patientPhone;
   final int? rating;
   final String? review;
@@ -47,7 +51,9 @@ class ApiAppointment {
       location: (json['location'] ?? '').toString(),
       status: (json['status'] ?? 'upcoming').toString(),
       prescriptionText: (json['prescriptionText'] ?? '').toString(),
+      patientId: json['patientId']?.toString(),
       patientName: json['patientName']?.toString(),
+      patientEmail: json['patientEmail']?.toString(),
       patientPhone: json['patientPhone']?.toString(),
       rating: json['rating'] != null ? int.tryParse(json['rating'].toString()) : null,
       review: json['review']?.toString(),

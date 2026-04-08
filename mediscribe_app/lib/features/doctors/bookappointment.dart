@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mediscribe_app/core/app_state.dart';
 import 'package:mediscribe_app/screens/Appointment.dart';
 import 'package:mediscribe_app/services/doctor_api_service.dart';
+import 'package:mediscribe_app/screens/payment_screen.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -170,37 +171,39 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Future<void> _bookAppointment() async {
-    final messenger = ScaffoldMessenger.of(context);
-    final appState = AppScope.of(context);
-    setState(() => _booking = true);
+    if (selectedTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a time slot'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
 
-    final ok = await appState.bookAppointment(
-      Appointment(
-        doctorId: widget.doctor.id,
-        doctorName: widget.doctor.name,
-        specialty: widget.doctor.specialty,
-        dateLabel: _dateLabel,
-        timeLabel: selectedTime ?? '09:00',
-        type: 'General checkup',
-        location: 'Clinic',
+    // Navigate to payment screen instead of direct booking
+    final paymentResult = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PaymentScreen(
+          doctorId: widget.doctor.id,
+          doctorName: widget.doctor.name,
+          specialty: widget.doctor.specialty,
+          fee: widget.doctor.fee,
+          dateLabel: _dateLabel,
+          timeLabel: selectedTime!,
+          type: 'General checkup',
+          location: 'Clinic',
+        ),
       ),
     );
 
-    if (!mounted) return;
-    setState(() => _booking = false);
-
-    if (ok) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Appointment booked successfully!'), backgroundColor: Colors.green),
-      );
+    // If payment was successful, go to appointments screen
+    if (paymentResult == true && mounted) {
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const AppointmentsScreen()),
         (route) => route.isFirst,
-      );
-    } else {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Booking failed. Please try again.'), backgroundColor: Colors.redAccent),
       );
     }
   }

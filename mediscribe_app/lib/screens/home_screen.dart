@@ -10,6 +10,7 @@ import 'package:mediscribe_app/services/doctor_api_service.dart';
 import 'package:mediscribe_app/services/notification_service.dart';
 import 'package:mediscribe_app/screens/rate_appointment_screen.dart';
 import 'package:mediscribe_app/services/auth_api_service.dart';
+import 'package:mediscribe_app/services/incoming_call_service.dart';
 import 'dart:async';
 
 void main() {
@@ -109,6 +110,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _initLocation();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppScope.of(context).loadAppointments();
+      // Initialize incoming call listener
+      IncomingCallService.initialize(context);
     });
   }
 

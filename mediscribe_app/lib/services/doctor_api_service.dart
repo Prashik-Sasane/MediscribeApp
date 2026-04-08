@@ -18,6 +18,8 @@ class NearbyDoctor {
     this.isOnline = false,
     this.isVerified = false,
     this.licenseNumber = '',
+    this.phone = '',
+    this.email = '',
   });
 
   final String id;
@@ -33,6 +35,8 @@ class NearbyDoctor {
   final bool isOnline;
   final bool isVerified;
   final String licenseNumber;
+  final String phone;
+  final String email;
 
   factory NearbyDoctor.fromMap(Map<String, dynamic> map) {
     return NearbyDoctor(
@@ -49,6 +53,8 @@ class NearbyDoctor {
       isOnline: (map['isOnline'] ?? false) as bool,
       isVerified: (map['isVerified'] ?? false) as bool,
       licenseNumber: (map['licenseNumber'] ?? '').toString(),
+      phone: (map['phone'] ?? '').toString(),
+      email: (map['email'] ?? '').toString(),
     );
   }
 }

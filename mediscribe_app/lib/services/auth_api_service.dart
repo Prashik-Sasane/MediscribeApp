@@ -17,6 +17,7 @@ class ApiUser {
     this.fee = 0,
     this.bio = '',
     this.isOnline = false,
+    this.upiId = '',
   });
 
   final String name;
@@ -31,6 +32,7 @@ class ApiUser {
   final int fee;
   final String bio;
   final bool isOnline;
+  final String upiId;
 
   factory ApiUser.fromJson(Map<String, dynamic> json) {
     return ApiUser(
@@ -46,6 +48,7 @@ class ApiUser {
       fee: ((json['fee'] ?? 0) as num).toInt(),
       bio: (json['bio'] ?? '').toString(),
       isOnline: (json['isOnline'] ?? false) as bool,
+      upiId: (json['upiId'] ?? '').toString(),
     );
   }
 }

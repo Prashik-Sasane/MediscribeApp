@@ -50,6 +50,19 @@ async function sendMessage(req, res) {
     text: text.trim(),
   });
 
+  // Send notification to the other party
+  try {
+    const isDoctorSender = req.role === "doctor";
+    const receiverRole = isDoctorSender ? "patient" : "doctor";
+    const receiverName = isDoctorSender ? (appt.patientName || "Patient") : appt.doctorName;
+    
+    // Note: In a real app, you'd use WebSocket or Firebase Cloud Messaging
+    // For now, we'll store notification in a way the frontend can poll
+    console.log(`[NOTIFICATION] New message from ${senderName} to ${receiverName} (${receiverRole})`);
+  } catch (err) {
+    console.error("Notification error:", err);
+  }
+
   return res.status(201).json({ message: msgPublic(msg) });
 }
 

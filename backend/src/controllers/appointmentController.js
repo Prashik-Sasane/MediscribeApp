@@ -116,10 +116,12 @@ function apptPublic(a) {
 
 function apptPublicDoctor(a) {
   const base = apptPublic(a);
+  base.patientId = a.patientId?._id?.toString() || null;
   base.patient = a.patientId
     ? { id: a.patientId._id, name: a.patientId.name, email: a.patientId.email }
     : null;
   base.patientName = a.patientId?.name || 'Unknown';
+  base.patientEmail = a.patientId?.email || '';
   base.patientPhone = a.patientId?.phone || '';
   return base;
 }

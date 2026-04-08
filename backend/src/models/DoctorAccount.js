@@ -23,6 +23,7 @@ const doctorAccountSchema = new mongoose.Schema(
     isVerified: { type: Boolean, default: false }, // Doctor verification status
     licenseNumber: { type: String, default: "" }, // Medical license number
     phone: { type: String, default: "" },
+    upiId: { type: String, default: "" }, // UPI ID for receiving payments
     isOnline: { type: Boolean, default: false },
     lat: { type: Number, default: 0 },
     lng: { type: Number, default: 0 },

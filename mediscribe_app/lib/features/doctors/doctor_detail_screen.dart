@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:mediscribe_app/features/doctors/bookappointment.dart';
 import 'package:mediscribe_app/services/doctor_api_service.dart';
-import 'package:mediscribe_app/screens/video_call_screen.dart';
+import 'package:mediscribe_app/screens/webrtc_call_screen.dart';
 import 'package:mediscribe_app/screens/chat_screen.dart';
 import 'package:mediscribe_app/core/app_state.dart';
+import 'package:mediscribe_app/widgets/phone_verification_dialog.dart';
+import 'package:mediscribe_app/screens/payment_screen.dart';
 
 class DoctorDetailScreen extends StatelessWidget {
   final NearbyDoctor doctor;
@@ -383,7 +385,7 @@ class DoctorDetailScreen extends StatelessWidget {
     );
   }
 
-  void _openChat(BuildContext context) {
+  Future<void> _openChat(BuildContext context) async {
     final appState = AppScope.of(context);
     final token = appState.token;
     
@@ -396,6 +398,10 @@ class DoctorDetailScreen extends StatelessWidget {
       );
       return;
     }
+
+    // Check phone number first
+    final hasPhone = await showPhoneVerificationDialog(context);
+    if (!hasPhone) return;
 
     // Check if user has an existing appointment with this doctor
     final existingAppointment = appState.appointments.firstWhere(
@@ -417,33 +423,155 @@ class DoctorDetailScreen extends StatelessWidget {
         ),
       );
     } else {
-      // No appointment - prompt to book
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Book an appointment with Dr. ${doctor.name} to start chatting'),
-          backgroundColor: Colors.blue,
-          duration: const Duration(seconds: 2),
-          action: SnackBarAction(
-            label: 'Book Now',
-            textColor: Colors.white,
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => BookingScreen(doctor: doctor)),
-              );
-            },
+      // No appointment - prompt to book with payment
+      final shouldBook = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Book Appointment',
+            style: TextStyle(color: Colors.white),
           ),
+          content: Text(
+            'You need to book and pay for an appointment with Dr. ${doctor.name} (₹${doctor.fee}) to start chatting.',
+            style: TextStyle(color: Colors.white.withOpacity(0.7)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2E7DFF),
+              ),
+              child: const Text('Proceed to Payment'),
+            ),
+          ],
         ),
       );
+
+      if (shouldBook == true && context.mounted) {
+        final paymentResult = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PaymentScreen(
+              doctorId: doctor.id,
+              doctorName: doctor.name,
+              specialty: doctor.specialty,
+              fee: doctor.fee,
+              dateLabel: 'Select Date',
+              timeLabel: 'Select Time',
+            ),
+          ),
+        );
+
+        if (paymentResult == true && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Appointment booked! You can now chat with the doctor.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
     }
   }
 
-  void _openVideoCall(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => VideoCallScreen(doctor: doctor),
-      ),
+  Future<void> _openVideoCall(BuildContext context) async {
+    final appState = AppScope.of(context);
+    final token = appState.token;
+    
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please login to start video call'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Check phone number first
+    final hasPhone = await showPhoneVerificationDialog(context);
+    if (!hasPhone) return;
+
+    // Check if user has an existing appointment
+    final existingAppointment = appState.appointments.firstWhere(
+      (a) => a.doctorId == doctor.id && a.status == 'upcoming',
+      orElse: () => Appointment(doctorName: '', specialty: '', dateLabel: '', timeLabel: '', type: '', location: ''),
     );
+
+    if (existingAppointment.id.isNotEmpty) {
+      // Open WebRTC video call
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => WebRTCCallScreen(
+            targetUserId: doctor.email.isNotEmpty ? doctor.email : doctor.id,
+            targetName: doctor.name,
+            targetImageUrl: doctor.imageUrl,
+            isIncoming: false,
+          ),
+        ),
+      );
+    } else {
+      // No appointment - prompt to book with payment
+      final shouldBook = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Book Video Consultation',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: Text(
+            'You need to book and pay for an appointment with Dr. ${doctor.name} (₹${doctor.fee}) to start video consultation.',
+            style: TextStyle(color: Colors.white.withOpacity(0.7)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2E7DFF),
+              ),
+              child: const Text('Proceed to Payment'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldBook == true && context.mounted) {
+        final paymentResult = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PaymentScreen(
+              doctorId: doctor.id,
+              doctorName: doctor.name,
+              specialty: doctor.specialty,
+              fee: doctor.fee,
+              dateLabel: 'Select Date',
+              timeLabel: 'Select Time',
+            ),
+          ),
+        );
+
+        if (paymentResult == true && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Appointment booked! You can now start video consultation.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    }
   }
 }

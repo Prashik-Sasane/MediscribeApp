@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:mediscribe_app/core/app_state.dart';
 import 'package:mediscribe_app/services/appointment_service.dart';
 import 'package:mediscribe_app/features/consultant/consultant_doctors_screen.dart';
 import 'package:mediscribe_app/screens/chat_screen.dart';
+import 'package:mediscribe_app/screens/doctor_patient_chat_list.dart';
+import 'package:mediscribe_app/screens/webrtc_call_screen.dart';
+import 'package:mediscribe_app/services/incoming_call_service.dart';
 
 class DoctorHomeScreen extends StatefulWidget {
   const DoctorHomeScreen({super.key});
@@ -19,6 +23,10 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
   void initState() {
     super.initState();
     _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Initialize incoming call listener
+      IncomingCallService.initialize(context);
+    });
   }
 
   Future<void> _load() async {
@@ -84,7 +92,7 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
                         if (nextPatient != null) ...[
                           _buildSectionHeader("Next Patient", "View Schedule"),
                           const SizedBox(height: 12),
-                          _buildNextPatientHero(nextPatient, appState.token ?? ''),
+                          _buildNextPatientHero(nextPatient, appState),
                           const SizedBox(height: 30),
                         ],
 
@@ -162,7 +170,7 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
     );
   }
 
-  Widget _buildNextPatientHero(appointment, String token) {
+  Widget _buildNextPatientHero(appointment, dynamic appState) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -194,6 +202,11 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
                         style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                     Text("${appointment.timeLabel} • ${appointment.type}", 
                         style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                    if (appointment.patientPhone != null && appointment.patientPhone!.isNotEmpty)
+                      Text(
+                        "📞 ${appointment.patientPhone}",
+                        style: const TextStyle(color: Colors.white60, fontSize: 12),
+                      ),
                   ],
                 ),
               ),
@@ -215,7 +228,7 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
           ),
           const SizedBox(height: 20),
           ElevatedButton(
-            onPressed: () {},
+            onPressed: () => _startConsultation(context, appointment, appState),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.white,
               foregroundColor: const Color(0xFF2E7DFF),
@@ -281,10 +294,10 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
                   label: 'Patient Chats',
                   color: const Color(0xFF34D399),
                   onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Chat feature - Select a patient to start chatting'),
-                        backgroundColor: Color(0xFF34D399),
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const DoctorPatientChatList(),
                       ),
                     );
                   },
@@ -336,6 +349,68 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
           'No other appointments for today.',
           textAlign: TextAlign.center,
           style: TextStyle(color: Colors.white54),
+        ),
+      ),
+    );
+  }
+
+  void _startConsultation(BuildContext context, dynamic appointment, dynamic appState) {
+    // Check if running on mobile platform (WebRTC only works on Android/iOS)
+    final isMobile = Platform.isAndroid || Platform.isIOS;
+    
+    if (!isMobile) {
+      // Show message for desktop/web platforms
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Video Call Not Available',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: const Text(
+            'Video consultations are only available on mobile devices (Android/iOS). '
+            'Please use the mobile app to start video calls.\n\n'
+            'You can still chat with the patient using the chat feature.',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK', style: TextStyle(color: Color(0xFF2E7DFF))),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    // Mobile platform - start WebRTC call
+    final patientName = appointment.patientName ?? 'Patient';
+    final patientEmail = appointment.patientEmail ?? '';
+    
+    // Use patient's email for Socket.io routing (matches how users register)
+    final targetUserId = patientEmail;
+    
+    if (targetUserId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Patient email not available. Cannot start video call.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => WebRTCCallScreen(
+          targetUserId: targetUserId,
+          targetName: patientName,
+          targetImageUrl: '',
+          isIncoming: false,
         ),
       ),
     );
@@ -402,8 +477,12 @@ class _AppointmentCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(appointment.dateLabel, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                Text(appointment.timeLabel, style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                Text(
+                  appointment.patientName ?? 'Patient',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+                Text('${appointment.dateLabel} • ${appointment.timeLabel}', 
+                    style: const TextStyle(color: Colors.white38, fontSize: 12)),
               ],
             ),
           ),

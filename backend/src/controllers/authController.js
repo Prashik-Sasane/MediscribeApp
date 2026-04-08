@@ -20,6 +20,7 @@ function userResponse(user) {
     phone: user.phone,
     bloodGroup: user.bloodGroup,
     avatarUrl: user.avatarUrl,
+    upiId: user.upiId,
   };
 }
 
@@ -37,6 +38,8 @@ function doctorResponse(doc) {
     isOnline: doc.isOnline,
     isVerified: doc.isVerified,
     licenseNumber: doc.licenseNumber,
+    phone: doc.phone,
+    upiId: doc.upiId,
     role: "doctor",
   };
 }
@@ -137,4 +140,38 @@ async function getMe(req, res) {
   return res.json({ user: userResponse(user) });
 }
 
-module.exports = { signup, login, doctorSignup, doctorLogin, getMe };
+// ─── Update user profile (phone, upiId, etc.) ─────────────────────
+async function updateProfile(req, res) {
+  const { phone, upiId, bloodGroup, avatarUrl } = req.body;
+
+  if (req.role === "doctor") {
+    const updateData = {};
+    if (phone !== undefined) updateData.phone = phone;
+    if (upiId !== undefined) updateData.upiId = upiId;
+
+    const doc = await DoctorAccount.findByIdAndUpdate(
+      req.userId,
+      updateData,
+      { new: true }
+    );
+    if (!doc) return res.status(404).json({ message: "Doctor not found" });
+    return res.json({ user: doctorResponse(doc), message: "Profile updated" });
+  }
+
+  // For patients
+  const updateData = {};
+  if (phone !== undefined) updateData.phone = phone;
+  if (upiId !== undefined) updateData.upiId = upiId;
+  if (bloodGroup !== undefined) updateData.bloodGroup = bloodGroup;
+  if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
+
+  const user = await User.findByIdAndUpdate(
+    req.userId,
+    updateData,
+    { new: true }
+  );
+  if (!user) return res.status(404).json({ message: "User not found" });
+  return res.json({ user: userResponse(user), message: "Profile updated" });
+}
+
+module.exports = { signup, login, doctorSignup, doctorLogin, getMe, updateProfile };

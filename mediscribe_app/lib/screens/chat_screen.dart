@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:mediscribe_app/services/notification_service.dart';
 
 class ChatScreen extends StatefulWidget {
   final String appointmentId;
@@ -26,13 +27,68 @@ class _ChatScreenState extends State<ChatScreen> {
   List<Map<String, dynamic>> messages = [];
   bool _loading = true;
   bool _sending = false;
+  int _lastMessageCount = 0;
 
   @override
   void initState() {
     super.initState();
     _loadMessages();
     // Auto-refresh every 3 seconds
-    Future.delayed(const Duration(seconds: 3), _loadMessages);
+    _startAutoRefresh();
+  }
+
+  void _startAutoRefresh() {
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        _checkForNewMessages();
+        _startAutoRefresh();
+      }
+    });
+  }
+
+  Future<void> _checkForNewMessages() async {
+    try {
+      final response = await http.get(
+        Uri.parse('http://localhost:5000/api/chat/${widget.appointmentId}'),
+        headers: {'Authorization': 'Bearer ${widget.token}'},
+      );
+
+      if (response.statusCode == 200 && mounted) {
+        final data = jsonDecode(response.body);
+        final newMessages = List<Map<String, dynamic>>.from(data['messages'] ?? []);
+        
+        // Check if there are new messages
+        if (newMessages.length > _lastMessageCount && _lastMessageCount > 0) {
+          // New message received!
+          final latestMsg = newMessages.last;
+          final senderName = latestMsg['senderName'] ?? 'Someone';
+          
+          // Only show notification if message is from other person
+          if (!widget.isDoctor && latestMsg['senderRole'] == 'doctor') {
+            NotificationService.addNotification(
+              title: 'New Message from Dr. ${widget.doctorName}',
+              message: latestMsg['text'] ?? 'New message',
+              type: NotificationType.info,
+            );
+          } else if (widget.isDoctor) {
+            NotificationService.addNotification(
+              title: 'New Message from Patient',
+              message: latestMsg['text'] ?? 'New message',
+              type: NotificationType.info,
+            );
+          }
+        }
+        
+        setState(() {
+          messages = newMessages;
+          _lastMessageCount = newMessages.length;
+          _loading = false;
+        });
+        _scrollToBottom();
+      }
+    } catch (e) {
+      print('Error checking messages: $e');
+    }
   }
 
   @override
@@ -53,6 +109,7 @@ class _ChatScreenState extends State<ChatScreen> {
         final data = jsonDecode(response.body);
         setState(() {
           messages = List<Map<String, dynamic>>.from(data['messages'] ?? []);
+          _lastMessageCount = messages.length;
           _loading = false;
         });
         _scrollToBottom();

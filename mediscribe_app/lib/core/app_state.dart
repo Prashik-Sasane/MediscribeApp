@@ -18,6 +18,7 @@ class UserProfile {
     this.fee = 0,
     this.bio = '',
     this.isOnline = false,
+    this.upiId = '',
   });
 
   final String name;
@@ -32,6 +33,7 @@ class UserProfile {
   final int fee;
   final String bio;
   final bool isOnline;
+  final String upiId;
 }
 
 class Appointment {
@@ -46,7 +48,9 @@ class Appointment {
     this.status = 'upcoming',
     this.prescriptionText = '',
     this.doctorId = '',
+    this.patientId,
     this.patientName,
+    this.patientEmail,
     this.patientPhone,
     this.rating,
     this.review,
@@ -62,7 +66,9 @@ class Appointment {
   final String status;
   final String prescriptionText;
   final String doctorId;
+  final String? patientId;
   final String? patientName;
+  final String? patientEmail;
   final String? patientPhone;
   final int? rating;
   final String? review;
@@ -78,6 +84,12 @@ class Appointment {
     status: a.status,
     prescriptionText: a.prescriptionText,
     doctorId: a.doctorId,
+    patientId: a.patientId,
+    patientName: a.patientName,
+    patientEmail: a.patientEmail,
+    patientPhone: a.patientPhone,
+    rating: a.rating,
+    review: a.review,
   );
 }
 
@@ -237,6 +249,7 @@ class AppState extends ChangeNotifier {
     fee: u.fee,
     bio: u.bio,
     isOnline: u.isOnline,
+    upiId: u.upiId,
   );
 
   // ─── APPOINTMENTS ─────────────────────────────────────────────

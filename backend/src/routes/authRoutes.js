@@ -1,5 +1,5 @@
 const express = require("express");
-const { signup, login, doctorSignup, doctorLogin, getMe } = require("../controllers/authController");
+const { signup, login, doctorSignup, doctorLogin, getMe, updateProfile } = require("../controllers/authController");
 const { requireAuth } = require("../middleware/authMiddleware");
 
 const router = express.Router();
@@ -14,5 +14,8 @@ router.post("/doctor/login", doctorLogin);
 
 // Shared — get current user profile
 router.get("/me", requireAuth, getMe);
+
+// Shared — update profile
+router.put("/me", requireAuth, updateProfile);
 
 module.exports = router;

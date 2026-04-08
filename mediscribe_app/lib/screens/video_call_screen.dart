@@ -4,8 +4,13 @@ import 'package:url_launcher/url_launcher.dart';
 
 class VideoCallScreen extends StatefulWidget {
   final NearbyDoctor doctor;
+  final String? phoneNumber; // Doctor's real phone number
 
-  const VideoCallScreen({super.key, required this.doctor});
+  const VideoCallScreen({
+    super.key,
+    required this.doctor,
+    this.phoneNumber,
+  });
 
   @override
   State<VideoCallScreen> createState() => _VideoCallScreenState();
@@ -37,8 +42,22 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   }
 
   Future<void> _makePhoneCall() async {
-    // Use a demo phone number (replace with actual doctor phone from backend)
-    final phoneNumber = 'tel:+919876543210';
+    // Use doctor's real phone number
+    final phone = widget.phoneNumber;
+    
+    if (phone == null || phone.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Doctor has not added their phone number yet'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+    
+    final phoneNumber = 'tel:$phone';
     final uri = Uri.parse(phoneNumber);
     
     if (await canLaunchUrl(uri)) {
@@ -46,8 +65,8 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not launch phone dialer'),
+          SnackBar(
+            content: Text('Could not launch phone dialer for $phone'),
             backgroundColor: Colors.red,
           ),
         );
@@ -142,24 +161,49 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    // Phone number display
-                    GestureDetector(
-                      onTap: _makePhoneCall,
-                      child: Container(
+                    // Phone number display - Shows REAL doctor phone number
+                    if (widget.phoneNumber != null && widget.phoneNumber!.isNotEmpty)
+                      GestureDetector(
+                        onTap: _makePhoneCall,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.phone, color: Color(0xFF34D399), size: 16),
+                              const SizedBox(width: 8),
+                              Text(
+                                widget.phoneNumber!,
+                                style: const TextStyle(
+                                  color: Color(0xFF34D399),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
+                          color: Colors.orange.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.phone, color: Color(0xFF34D399), size: 16),
+                            const Icon(Icons.warning_amber, color: Colors.orange, size: 16),
                             const SizedBox(width: 8),
                             const Text(
-                              '+91 98765 43210',
+                              'Phone number not set',
                               style: TextStyle(
-                                color: Color(0xFF34D399),
+                                color: Colors.orange,
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -167,7 +211,6 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                           ],
                         ),
                       ),
-                    ),
                   ],
                 ),
 
