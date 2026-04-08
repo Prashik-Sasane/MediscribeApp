@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:mediscribe_app/core/app_state.dart';
 import 'package:mediscribe_app/screens/Appointment.dart';
 import 'package:mediscribe_app/services/doctor_api_service.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class BookingScreen extends StatefulWidget {
   final NearbyDoctor doctor;
@@ -13,15 +15,16 @@ class BookingScreen extends StatefulWidget {
 
 class _BookingScreenState extends State<BookingScreen> {
   DateTime selectedDate = DateTime.now().add(const Duration(days: 3));
-  String? selectedTime = "11:00";
+  String? selectedTime;
   bool _booking = false;
+  List<String> availableSlots = [];
+  bool _loadingSlots = false;
 
-  final List<String> times = [
+  final List<String> allTimes = [
     "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
-    "12:00", "12:30", "13:00", "13:30", "14:00", "14:30"
+    "12:00", "12:30", "13:00", "13:30", "14:00", "14:30",
+    "15:00", "15:30", "16:00", "16:30", "17:00"
   ];
-
-  final List<String> unavailableTimes = ["09:30", "12:30"];
 
   static const List<String> _monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -35,6 +38,41 @@ class _BookingScreenState extends State<BookingScreen> {
   String get _dateLabel {
     final day = _dayNames[selectedDate.weekday - 1];
     return '$day, ${_monthNames[selectedDate.month - 1]} ${selectedDate.day}';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAvailableSlots();
+  }
+
+  Future<void> _loadAvailableSlots() async {
+    setState(() => _loadingSlots = true);
+    
+    try {
+      final dateStr = '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
+      final response = await http.get(
+        Uri.parse('http://localhost:5000/api/doctors/${widget.doctor.id}/available-slots?date=$dateStr'),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final slots = data['slots'] as List;
+        setState(() {
+          availableSlots = slots
+              .where((s) => s['available'] == true)
+              .map((s) => s['time'] as String)
+              .toList();
+          selectedTime = availableSlots.isNotEmpty ? availableSlots[0] : null;
+        });
+      }
+    } catch (e) {
+      print('Error loading slots: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _loadingSlots = false);
+      }
+    }
   }
 
   @override
@@ -188,7 +226,10 @@ class _BookingScreenState extends State<BookingScreen> {
         bool isPast = DateTime(selectedDate.year, selectedDate.month, day).isBefore(DateTime.now().subtract(const Duration(days: 1)));
 
         return GestureDetector(
-          onTap: isPast ? null : () => setState(() => selectedDate = DateTime(selectedDate.year, selectedDate.month, day)),
+          onTap: isPast ? null : () {
+            setState(() => selectedDate = DateTime(selectedDate.year, selectedDate.month, day));
+            _loadAvailableSlots();
+          },
           child: Container(
             decoration: BoxDecoration(
               color: isSelected
@@ -232,10 +273,31 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Widget _buildTimeGrid() {
+    if (_loadingSlots) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: CircularProgressIndicator(color: Color(0xFF2E7DFF)),
+        ),
+      );
+    }
+
+    if (availableSlots.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Text(
+            'No available slots for this date',
+            style: TextStyle(color: Colors.white54, fontSize: 14),
+          ),
+        ),
+      );
+    }
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: times.length,
+      itemCount: allTimes.length,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 4,
         mainAxisSpacing: 10,
@@ -243,23 +305,27 @@ class _BookingScreenState extends State<BookingScreen> {
         childAspectRatio: 2.2,
       ),
       itemBuilder: (context, index) {
-        String time = times[index];
-        bool isUnavailable = unavailableTimes.contains(time);
+        String time = allTimes[index];
+        bool isAvailable = availableSlots.contains(time);
         bool isSelected = selectedTime == time;
 
         return GestureDetector(
-          onTap: isUnavailable ? null : () => setState(() => selectedTime = time),
+          onTap: isAvailable ? () => setState(() => selectedTime = time) : null,
           child: Container(
             decoration: BoxDecoration(
               color: isSelected 
                   ? const Color(0xFF2E7DFF) 
-                  : (isUnavailable ? const Color(0xFFFF5252).withOpacity(0.8) : const Color(0xFF1E293B)),
+                  : (isAvailable ? const Color(0xFF1E293B) : const Color(0xFFFF5252).withOpacity(0.3)),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Center(
               child: Text(
                 time,
-                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                style: TextStyle(
+                  color: isSelected ? Colors.white : (isAvailable ? Colors.white : Colors.white24),
+                  fontSize: 13,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                ),
               ),
             ),
           ),

@@ -16,6 +16,8 @@ const appointmentSchema = new mongoose.Schema(
       default: "upcoming",
     },
     prescriptionText: { type: String, default: "" },
+    rating: { type: Number, min: 1, max: 5 },
+    review: { type: String, default: "" },
   },
   { timestamps: true }
 );

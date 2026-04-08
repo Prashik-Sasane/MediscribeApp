@@ -12,6 +12,12 @@ class NearbyDoctor {
     required this.rating,
     required this.fee,
     required this.distanceKm,
+    this.experience = 0,
+    this.reviews = 0,
+    this.bio = '',
+    this.isOnline = false,
+    this.isVerified = false,
+    this.licenseNumber = '',
   });
 
   final String id;
@@ -21,6 +27,12 @@ class NearbyDoctor {
   final double rating;
   final int fee;
   final double distanceKm;
+  final int experience;
+  final int reviews;
+  final String bio;
+  final bool isOnline;
+  final bool isVerified;
+  final String licenseNumber;
 
   factory NearbyDoctor.fromMap(Map<String, dynamic> map) {
     return NearbyDoctor(
@@ -31,6 +43,12 @@ class NearbyDoctor {
       rating: ((map['rating'] ?? 0) as num).toDouble(),
       fee: ((map['fee'] ?? 500) as num).toInt(),
       distanceKm: ((map['distanceKm'] ?? 0) as num).toDouble(),
+      experience: ((map['experience'] ?? 0) as num).toInt(),
+      reviews: ((map['reviews'] ?? 0) as num).toInt(),
+      bio: (map['bio'] ?? '').toString(),
+      isOnline: (map['isOnline'] ?? false) as bool,
+      isVerified: (map['isVerified'] ?? false) as bool,
+      licenseNumber: (map['licenseNumber'] ?? '').toString(),
     );
   }
 }
@@ -40,6 +58,35 @@ class DoctorApiService {
     'API_BASE_URL',
     defaultValue: 'http://10.0.2.2:5000/api',
   );
+
+  static Future<List<NearbyDoctor>> getAllDoctors({
+    String specialty = '',
+    String searchQuery = '',
+    int page = 1,
+  }) async {
+    try {
+      final queryParams = <String, String>{
+        'page': page.toString(),
+      };
+      if (specialty.isNotEmpty) queryParams['specialty'] = specialty;
+      if (searchQuery.isNotEmpty) queryParams['q'] = searchQuery;
+
+      final uri = Uri.parse('$_baseUrl/doctors').replace(queryParameters: queryParams);
+      final response = await http.get(uri);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return [];
+      }
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      final doctors = (json['doctors'] as List<dynamic>? ?? []);
+      return doctors
+          .map((item) => NearbyDoctor.fromMap(item as Map<String, dynamic>))
+          .toList();
+    } on SocketException {
+      return [];
+    } on FormatException {
+      return [];
+    }
+  }
 
   static Future<List<NearbyDoctor>> getNearbyDoctors({
     required double lat,

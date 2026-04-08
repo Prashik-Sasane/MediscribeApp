@@ -7,6 +7,9 @@ import 'package:mediscribe_app/features/service/services_screen.dart';
 import 'package:mediscribe_app/features/doctors/doctor_detail_screen.dart';
 import 'package:mediscribe_app/services/location_service.dart';
 import 'package:mediscribe_app/services/doctor_api_service.dart';
+import 'package:mediscribe_app/services/notification_service.dart';
+import 'package:mediscribe_app/screens/rate_appointment_screen.dart';
+import 'package:mediscribe_app/services/auth_api_service.dart';
 import 'dart:async';
 
 void main() {
@@ -81,7 +84,8 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   List<Map<String, String>> _buildDisplayAppointments(List<Appointment> apiAppts) {
-    if (apiAppts.isEmpty) return _mockAppointments;
+    // Only show real upcoming appointments, no mock data
+    if (apiAppts.isEmpty) return [];
     return apiAppts
         .where((a) => a.status == 'upcoming')
         .take(5)
@@ -166,15 +170,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _startAutoScroll() {
     _autoScrollTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (_pageController.hasClients) {
-        final total = _mockAppointments.length;
-        _currentAppointmentIndex = (_currentAppointmentIndex + 1) % (total > 0 ? total : 1);
-        _pageController.animateToPage(
-          _currentAppointmentIndex,
-          duration: const Duration(milliseconds: 600),
-          curve: Curves.fastOutSlowIn,
-        );
-      }
+      final displayAppts = _buildDisplayAppointments(
+        AppScope.of(context).appointments,
+      );
+      
+      if (displayAppts.isEmpty || !_pageController.hasClients) return;
+      
+      final total = displayAppts.length;
+      _currentAppointmentIndex = (_currentAppointmentIndex + 1) % (total > 0 ? total : 1);
+      _pageController.animateToPage(
+        _currentAppointmentIndex,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.fastOutSlowIn,
+      );
     });
   }
 
@@ -210,15 +218,17 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             const SizedBox(height: 16),
 
-            _UpcomingAppointmentsSlider(
-              controller: _pageController,
-              currentIndex: _currentAppointmentIndex,
-              appointments: displayAppointments,
-            ),
-            const SizedBox(height: 28),
-
-            _buildDotIndicator(displayAppointments),
-            const SizedBox(height: 28),
+            // Only show slider if there are upcoming appointments
+            if (displayAppointments.isNotEmpty) ...[
+              _UpcomingAppointmentsSlider(
+                controller: _pageController,
+                currentIndex: _currentAppointmentIndex,
+                appointments: displayAppointments,
+              ),
+              const SizedBox(height: 28),
+              _buildDotIndicator(displayAppointments),
+              const SizedBox(height: 28),
+            ],
 
             const _ServiceSection(),
             const SizedBox(height: 32),
@@ -254,7 +264,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _ModernHeader extends StatelessWidget {
+class _ModernHeader extends StatefulWidget {
   final String city;
   final int upcomingCount;
   final TextEditingController searchController;
@@ -272,7 +282,23 @@ class _ModernHeader extends StatelessWidget {
   });
 
   @override
+  State<_ModernHeader> createState() => _ModernHeaderState();
+}
+
+class _ModernHeaderState extends State<_ModernHeader> {
+  @override
+  void initState() {
+    super.initState();
+    // Listen for notification changes
+    NotificationService.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final unreadCount = NotificationService.getUnreadCount();
+    
     return Column(
       children: [
         Row(
@@ -297,7 +323,7 @@ class _ModernHeader extends StatelessWidget {
                       const Icon(Icons.location_on, color: Colors.orangeAccent, size: 20),
                       const SizedBox(width: 6),
                       Text(
-                        city,
+                        widget.city,
                         style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
                       ),
                       const SizedBox(width: 6),
@@ -307,31 +333,34 @@ class _ModernHeader extends StatelessWidget {
                 ),
               ],
             ),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Stack(
-                children: [
-                  const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 24),
-                  if (upcomingCount > 0)
-                    Positioned(
-                      right: 0,
-                      top: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
-                        constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                        child: Text(
-                          '$upcomingCount',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+            GestureDetector(
+              onTap: () => _showNotifications(context),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Stack(
+                  children: [
+                    const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 24),
+                    if (unreadCount > 0)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
+                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                          child: Text(
+                            unreadCount > 9 ? '9+' : '$unreadCount',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                          ),
                         ),
-                      ),
-                    )
-                ],
+                      )
+                  ],
+                ),
               ),
             ),
           ],
@@ -347,7 +376,7 @@ class _ModernHeader extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
               ),
               child: TextField(
-                controller: searchController,
+                controller: widget.searchController,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   hintText: "Search doctors, clinics, locations...",
@@ -355,17 +384,17 @@ class _ModernHeader extends StatelessWidget {
                   prefixIcon: const Icon(Icons.search_rounded, color: Colors.white54),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(vertical: 15),
-                  suffixIcon: searching
+                  suffixIcon: widget.searching
                       ? const Padding(
                           padding: EdgeInsets.all(12),
                           child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54)),
                         )
                       : const Icon(Icons.tune_rounded, color: Colors.white54),
                 ),
-                onChanged: onSearchChanged,
+                onChanged: widget.onSearchChanged,
               ),
             ),
-            if (searchResults.isNotEmpty) ...[
+            if (widget.searchResults.isNotEmpty) ...[
               Container(
                 constraints: const BoxConstraints(maxHeight: 200),
                 margin: const EdgeInsets.only(top: 4),
@@ -375,15 +404,15 @@ class _ModernHeader extends StatelessWidget {
                 ),
                 child: ListView.builder(
                   shrinkWrap: true,
-                  itemCount: searchResults.length,
+                  itemCount: widget.searchResults.length,
                   itemBuilder: (context, index) {
-                    final place = searchResults[index];
+                    final place = widget.searchResults[index];
                     return ListTile(
                       leading: const Icon(Icons.location_on_outlined, color: Color(0xFF2E7DFF)),
                       title: Text(place.displayName, style: const TextStyle(color: Colors.white, fontSize: 13)),
                       subtitle: Text(place.address, style: const TextStyle(color: Colors.white54, fontSize: 11)),
                       onTap: () {
-                        searchController.text = place.displayName;
+                        widget.searchController.text = place.displayName;
                         Navigator.push(
                           context,
                           MaterialPageRoute(builder: (_) => const ExploreMapScreen()),
@@ -397,6 +426,204 @@ class _ModernHeader extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+
+  void _showNotifications(BuildContext context) {
+    final notifications = NotificationService.getNotifications();
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.7,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Notifications',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      if (notifications.isNotEmpty)
+                        TextButton(
+                          onPressed: () {
+                            NotificationService.markAllAsRead();
+                            setState(() {});
+                          },
+                          child: const Text(
+                            'Mark all read',
+                            style: TextStyle(color: Color(0xFF2E7DFF)),
+                          ),
+                        ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const Divider(color: Colors.white24),
+            
+            // Notifications list
+            if (notifications.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(40),
+                child: Column(
+                  children: [
+                    Icon(Icons.notifications_none, size: 60, color: Colors.white38),
+                    SizedBox(height: 16),
+                    Text(
+                      'No notifications yet',
+                      style: TextStyle(color: Colors.white38, fontSize: 16),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: notifications.length,
+                  itemBuilder: (context, index) {
+                    final notification = notifications[index];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: notification.type == NotificationType.success
+                            ? Colors.green.withOpacity(0.2)
+                            : notification.type == NotificationType.warning
+                                ? Colors.orange.withOpacity(0.2)
+                                : notification.type == NotificationType.error
+                                    ? Colors.red.withOpacity(0.2)
+                                    : const Color(0xFF2E7DFF).withOpacity(0.2),
+                        child: Text(
+                          notification.getIcon(),
+                          style: const TextStyle(fontSize: 20),
+                        ),
+                      ),
+                      title: Text(
+                        notification.title,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: notification.isRead ? FontWeight.normal : FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 4),
+                          Text(
+                            notification.message,
+                            style: const TextStyle(color: Colors.white70, fontSize: 13),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            notification.getTimeAgo(),
+                            style: const TextStyle(color: Colors.white38, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                      trailing: !notification.isRead
+                          ? Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF2E7DFF),
+                                shape: BoxShape.circle,
+                              ),
+                            )
+                          : null,
+                      onTap: () {
+                        NotificationService.markAsRead(index);
+                        setState(() {});
+                        
+                        // Handle notification actions
+                        if (notification.data != null) {
+                          final action = notification.data!['action'];
+                          if (action == 'rate_doctor') {
+                            Navigator.pop(context); // Close notification sheet
+                            _navigateToRateAppointment(
+                              context,
+                              notification.data!['appointmentId'],
+                              notification.data!['doctorName'],
+                            );
+                          }
+                        }
+                      },
+                    );
+                  },
+                ),
+              ),
+            
+            // Clear all button
+            if (notifications.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: OutlinedButton(
+                  onPressed: () {
+                    NotificationService.clearAll();
+                    setState(() {});
+                  },
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.red),
+                    minimumSize: const Size(double.infinity, 45),
+                  ),
+                  child: const Text(
+                    'Clear All Notifications',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _navigateToRateAppointment(BuildContext context, String appointmentId, String doctorName) {
+    // Get auth token
+    final appState = AppScope.of(context);
+    final token = appState.token;
+    
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please login to rate doctor'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Navigate to rating screen
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => RateAppointmentScreen(
+          appointmentId: appointmentId,
+          doctorName: doctorName,
+          token: token,
+        ),
+      ),
     );
   }
 }

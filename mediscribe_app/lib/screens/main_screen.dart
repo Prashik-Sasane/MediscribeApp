@@ -3,6 +3,9 @@ import 'package:mediscribe_app/core/app_state.dart';
 import 'home_screen.dart';
 import 'doctor_home_screen.dart';
 import 'package:mediscribe_app/screens/schedule_screen.dart';
+// import 'package:mediscribe_app/features/doctors/doctor_list_screen.dart';
+// import 'package:mediscribe_app/features/doctors/doctor_detail_screen.dart';
+import 'package:mediscribe_app/screens/find_doctors_screen.dart';
 import 'upload_screen.dart';
 import 'profile_screen.dart';
 
@@ -20,7 +23,7 @@ class _MainNavigationState extends State<MainNavigation> {
     if (isDoctor) {
       return const [
         DoctorHomeScreen(),
-        DoctorListScreen(),
+        ScheduleScreen(),
         UploadScreen(),
         ProfileScreen(),
       ];

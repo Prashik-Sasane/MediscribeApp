@@ -25,4 +25,13 @@ function requireDoctor(req, res, next) {
   });
 }
 
-module.exports = { requireAuth, requireDoctor };
+function requireAdmin(req, res, next) {
+  requireAuth(req, res, () => {
+    if (req.role !== "admin") {
+      return res.status(403).json({ message: "Admin access only" });
+    }
+    next();
+  });
+}
+
+module.exports = { requireAuth, requireDoctor, requireAdmin };

@@ -65,7 +65,7 @@ class AuthApiResult {
 class AuthApiService {
   static const String _baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.117.14.49:5000/api',
+    defaultValue: 'http://localhost:5000/api',
   );
 
   static Future<AuthApiResult> login({
@@ -104,11 +104,21 @@ class AuthApiService {
     required String email,
     required String password,
     required String specialty,
+    int experience = 0,
     int fee = 500,
+    String bio = '',
   }) {
     return _authCall(
       endpoint: '/auth/doctor/signup',
-      body: {'name': name, 'email': email, 'password': password, 'specialty': specialty, 'fee': fee},
+      body: {
+        'name': name, 
+        'email': email, 
+        'password': password, 
+        'specialty': specialty,
+        'experience': experience,
+        'fee': fee,
+        'bio': bio,
+      },
     );
   }
 

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:mediscribe_app/features/doctors/doctor_detail_screen.dart';
+import 'package:mediscribe_app/services/doctor_api_service.dart';
 
 class ConsultantSearchScreen extends StatefulWidget {
   const ConsultantSearchScreen({super.key});
@@ -9,7 +11,30 @@ class ConsultantSearchScreen extends StatefulWidget {
 
 class _ConsultantSearchScreenState extends State<ConsultantSearchScreen> {
   String selectedSpecialty = "All";
-  final List<String> specialties = ["All", "Cardiologist", "Dermatologist", "Pediatrician", "Neurologist"];
+  final List<String> specialties = ["All", "Cardiologist", "Dermatologist", "Pediatrician", "Neurologist", "Dentist", "General Physician"];
+  List<NearbyDoctor> doctors = [];
+  bool _loading = true;
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDoctors();
+  }
+
+  Future<void> _loadDoctors() async {
+    setState(() => _loading = true);
+    final fetchedDoctors = await DoctorApiService.getAllDoctors(
+      specialty: selectedSpecialty == "All" ? '' : selectedSpecialty,
+      searchQuery: _searchQuery,
+    );
+    if (mounted) {
+      setState(() {
+        doctors = fetchedDoctors;
+        _loading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,43 +87,63 @@ class _ConsultantSearchScreenState extends State<ConsultantSearchScreen> {
           ),
 
           // 3. Doctor Results
-          SliverPadding(
-            padding: const EdgeInsets.all(20),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                _buildPremiumDoctorCard(
-                  name: "Dr. Sarah Jenkins",
-                  specialty: "Senior Cardiologist",
-                  rating: "4.9",
-                  reviews: "120",
-                  experience: "12 Years",
-                  price: "30",
-                  imageUrl: "https://images.unsplash.com/photo-1559839734-2b71f1e3c770?w=200",
-                  isOnline: true,
-                ),
-                _buildPremiumDoctorCard(
-                  name: "Dr. Marcus Thorne",
-                  specialty: "Dermatologist",
-                  rating: "4.8",
-                  reviews: "85",
-                  experience: "8 Years",
-                  price: "25",
-                  imageUrl: "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=200",
-                  isOnline: true,
-                ),
-                _buildPremiumDoctorCard(
-                  name: "Dr. Elena Rodriguez",
-                  specialty: "Neurologist",
-                  rating: "5.0",
-                  reviews: "210",
-                  experience: "15 Years",
-                  price: "45",
-                  imageUrl: "https://images.unsplash.com/photo-1594824476967-48c8b964273f?w=200",
-                  isOnline: false,
-                ),
-              ]),
-            ),
-          ),
+          _loading
+              ? const SliverFillRemaining(
+                  child: Center(child: CircularProgressIndicator(color: Color(0xFF2E7DFF))),
+                )
+              : doctors.isEmpty
+                  ? SliverFillRemaining(
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.person_search_outlined,
+                              size: 80,
+                              color: Colors.white.withOpacity(0.2),
+                            ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'No doctors found',
+                              style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Try adjusting your filters',
+                              style: TextStyle(color: Colors.white38, fontSize: 14),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : SliverPadding(
+                      padding: const EdgeInsets.all(20),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final doc = doctors[index];
+                            return _buildPremiumDoctorCard(
+                              name: doc.name,
+                              specialty: doc.specialty,
+                              rating: doc.rating.toStringAsFixed(1),
+                              reviews: doc.reviews.toString(),
+                              experience: '${doc.experience} Years',
+                              price: doc.fee.toString(),
+                              imageUrl: doc.imageUrl.isNotEmpty
+                                  ? doc.imageUrl
+                                  : 'https://i.pravatar.cc/300?u=${doc.id}',
+                              isOnline: doc.isOnline,
+                              doctor: doc,
+                            );
+                          },
+                          childCount: doctors.length,
+                        ),
+                      ),
+                    ),
         ],
       ),
     );
@@ -112,14 +157,18 @@ class _ConsultantSearchScreenState extends State<ConsultantSearchScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
-      child: const TextField(
-        style: TextStyle(color: Colors.white),
-        decoration: InputDecoration(
+      child: TextField(
+        style: const TextStyle(color: Colors.white),
+        decoration: const InputDecoration(
           icon: Icon(Icons.search_rounded, color: Color(0xFF2E7DFF)),
           hintText: "Search doctor by name...",
           hintStyle: TextStyle(color: Colors.white30, fontSize: 14),
           border: InputBorder.none,
         ),
+        onChanged: (value) {
+          _searchQuery = value;
+          _loadDoctors();
+        },
       ),
     );
   }
@@ -133,7 +182,10 @@ class _ConsultantSearchScreenState extends State<ConsultantSearchScreen> {
         itemBuilder: (context, index) {
           bool isSelected = selectedSpecialty == specialties[index];
           return GestureDetector(
-            onTap: () => setState(() => selectedSpecialty = specialties[index]),
+            onTap: () {
+              setState(() => selectedSpecialty = specialties[index]);
+              _loadDoctors();
+            },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               margin: const EdgeInsets.only(right: 10),
@@ -163,8 +215,18 @@ class _ConsultantSearchScreenState extends State<ConsultantSearchScreen> {
     required String price,
     required String imageUrl,
     required bool isOnline,
+    required NearbyDoctor doctor,
   }) {
-    return Container(
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DoctorDetailScreen(doctor: doctor),
+          ),
+        );
+      },
+      child: Container(
       margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         color: const Color(0xFF1E293B),
@@ -251,6 +313,7 @@ class _ConsultantSearchScreenState extends State<ConsultantSearchScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

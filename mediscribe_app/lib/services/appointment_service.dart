@@ -14,6 +14,10 @@ class ApiAppointment {
     required this.location,
     required this.status,
     this.prescriptionText = '',
+    this.patientName,
+    this.patientPhone,
+    this.rating,
+    this.review,
   });
 
   final String id;
@@ -26,6 +30,10 @@ class ApiAppointment {
   final String location;
   final String status;
   final String prescriptionText;
+  final String? patientName;
+  final String? patientPhone;
+  final int? rating;
+  final String? review;
 
   factory ApiAppointment.fromJson(Map<String, dynamic> json) {
     return ApiAppointment(
@@ -39,6 +47,10 @@ class ApiAppointment {
       location: (json['location'] ?? '').toString(),
       status: (json['status'] ?? 'upcoming').toString(),
       prescriptionText: (json['prescriptionText'] ?? '').toString(),
+      patientName: json['patientName']?.toString(),
+      patientPhone: json['patientPhone']?.toString(),
+      rating: json['rating'] != null ? int.tryParse(json['rating'].toString()) : null,
+      review: json['review']?.toString(),
     );
   }
 }

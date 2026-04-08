@@ -35,6 +35,8 @@ function doctorResponse(doc) {
     rating: doc.rating,
     bio: doc.bio,
     isOnline: doc.isOnline,
+    isVerified: doc.isVerified,
+    licenseNumber: doc.licenseNumber,
     role: "doctor",
   };
 }
@@ -68,13 +70,14 @@ async function login(req, res) {
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) return res.status(401).json({ message: "Invalid credentials" });
 
-  const token = signToken(user._id.toString(), "patient");
+  // Use the ACTUAL user role from database (patient, doctor, or admin)
+  const token = signToken(user._id.toString(), user.role);
   return res.json({ token, user: userResponse(user) });
 }
 
 // ─── Doctor Signup ────────────────────────────────────────────────
 async function doctorSignup(req, res) {
-  const { name, email, password, specialty, fee, experience, bio, lat, lng, phone } = req.body;
+  const { name, email, password, specialty, fee, experience, bio, lat, lng, phone, licenseNumber, autoVerify } = req.body;
   if (!name || !email || !password || !specialty)
     return res.status(400).json({ message: "name, email, password, specialty are required" });
   if (password.length < 6)
@@ -93,6 +96,8 @@ async function doctorSignup(req, res) {
     experience: experience || 0,
     bio: bio || "",
     phone: phone || "",
+    licenseNumber: licenseNumber || "",
+    isVerified: autoVerify === true, // Auto-verify if flag is set, otherwise false
     lat: lat || 0,
     lng: lng || 0,
     location: {

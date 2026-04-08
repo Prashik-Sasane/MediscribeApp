@@ -58,6 +58,44 @@ async function updateStatus(req, res) {
   return res.json({ appointment: apptPublic(appt) });
 }
 
+// POST /api/appointments/:id/rate (patient only)
+async function rateAppointment(req, res) {
+  const { rating, review } = req.body;
+  
+  if (!rating || rating < 1 || rating > 5) {
+    return res.status(400).json({ message: "Rating must be between 1 and 5" });
+  }
+
+  const appt = await Appointment.findById(req.params.id);
+  if (!appt) return res.status(404).json({ message: "Appointment not found" });
+
+  // Only patient who had the appointment can rate
+  if (appt.patientId.toString() !== req.userId) {
+    return res.status(403).json({ message: "Only the patient can rate this appointment" });
+  }
+
+  // Update appointment with rating
+  appt.rating = rating;
+  appt.review = review || "";
+  await appt.save();
+
+  // Update doctor's average rating
+  const doctor = await DoctorAccount.findById(appt.doctorId);
+  if (doctor) {
+    const totalReviews = doctor.reviews + 1;
+    const newAverage = ((doctor.rating * doctor.reviews) + rating) / totalReviews;
+    
+    doctor.rating = Math.round(newAverage * 10) / 10; // Round to 1 decimal
+    doctor.reviews = totalReviews;
+    await doctor.save();
+  }
+
+  return res.json({ 
+    message: "Rating submitted successfully",
+    appointment: apptPublic(appt)
+  });
+}
+
 function apptPublic(a) {
   return {
     id: a._id.toString(),
@@ -70,6 +108,8 @@ function apptPublic(a) {
     location: a.location,
     status: a.status,
     prescriptionText: a.prescriptionText,
+    rating: a.rating,
+    review: a.review,
     createdAt: a.createdAt,
   };
 }
@@ -79,7 +119,9 @@ function apptPublicDoctor(a) {
   base.patient = a.patientId
     ? { id: a.patientId._id, name: a.patientId.name, email: a.patientId.email }
     : null;
+  base.patientName = a.patientId?.name || 'Unknown';
+  base.patientPhone = a.patientId?.phone || '';
   return base;
 }
 
-module.exports = { bookAppointment, getMyAppointments, getDoctorAppointments, updateStatus };
+module.exports = { bookAppointment, getMyAppointments, getDoctorAppointments, updateStatus, rateAppointment };

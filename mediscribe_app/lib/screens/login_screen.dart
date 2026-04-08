@@ -17,6 +17,9 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _specialtyController = TextEditingController();
+  final TextEditingController _experienceController = TextEditingController();
+  final TextEditingController _feeController = TextEditingController();
+  final TextEditingController _bioController = TextEditingController();
   String? _errorText;
   bool _isSignup = false;
   bool _isDoctor = false; // Patient / Doctor toggle
@@ -27,6 +30,9 @@ class _LoginScreenState extends State<LoginScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _specialtyController.dispose();
+    _experienceController.dispose();
+    _feeController.dispose();
+    _bioController.dispose();
     super.dispose();
   }
 
@@ -42,6 +48,9 @@ class _LoginScreenState extends State<LoginScreen> {
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
           specialty: _specialtyController.text.trim(),
+          experience: int.tryParse(_experienceController.text.trim()) ?? 0,
+          fee: int.tryParse(_feeController.text.trim()) ?? 500,
+          bio: _bioController.text.trim(),
         );
       } else {
         success = await appState.doctorLogin(
@@ -191,6 +200,54 @@ class _LoginScreenState extends State<LoginScreen> {
                             controller: _specialtyController,
                             decoration: InputDecoration(
                               hintText: "e.g. Cardiology, Dentist",
+                              filled: true,
+                              fillColor: const Color(0xFF0F172A),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          const Text("Experience (years)", style: TextStyle(color: AppColors.textSecondary)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _experienceController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              hintText: "e.g. 5",
+                              filled: true,
+                              fillColor: const Color(0xFF0F172A),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          const Text("Consultation Fee (₹)", style: TextStyle(color: AppColors.textSecondary)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _feeController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              hintText: "e.g. 500",
+                              filled: true,
+                              fillColor: const Color(0xFF0F172A),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          const Text("Bio (optional)", style: TextStyle(color: AppColors.textSecondary)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _bioController,
+                            maxLines: 3,
+                            decoration: InputDecoration(
+                              hintText: "Tell patients about yourself...",
                               filled: true,
                               fillColor: const Color(0xFF0F172A),
                               border: OutlineInputBorder(

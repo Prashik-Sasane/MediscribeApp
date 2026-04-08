@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mediscribe_app/core/app_state.dart';
+import 'package:mediscribe_app/screens/admin_login_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -79,6 +80,21 @@ class ProfileScreen extends StatelessWidget {
 
                   const SizedBox(height: 24),
 
+                  // Admin Panel Button (Only visible if needed)
+                  _buildMenuTile(
+                    Icons.admin_panel_settings_outlined,
+                    "Admin Panel",
+                    iconColor: const Color(0xFFFF9800),
+                    bgColor: const Color(0xFFFF9800).withOpacity(0.1),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const AdminLoginScreen()),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+
                   _buildMenuTile(Icons.logout_rounded, "Logout",
                       isLogout: true,
                       onTap: () => appState.logout()),
@@ -106,16 +122,26 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMenuTile(IconData icon, String title, {bool isLogout = false, VoidCallback? onTap}) {
+  Widget _buildMenuTile(
+    IconData icon,
+    String title, {
+    bool isLogout = false,
+    Color? iconColor,
+    Color? bgColor,
+    VoidCallback? onTap,
+  }) {
+    final leadingColor = iconColor ?? (isLogout ? Colors.redAccent : const Color(0xFF4D91FF));
+    final backgroundColor = bgColor ?? (isLogout ? Colors.red.withOpacity(0.1) : const Color(0xFF2E7DFF).withOpacity(0.1));
+    
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: isLogout ? Colors.red.withOpacity(0.1) : const Color(0xFF2E7DFF).withOpacity(0.1),
+          color: backgroundColor,
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Icon(icon, color: isLogout ? Colors.redAccent : const Color(0xFF4D91FF), size: 22),
+        child: Icon(icon, color: leadingColor, size: 22),
       ),
       title: Text(title,
           style: TextStyle(

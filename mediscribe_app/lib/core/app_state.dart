@@ -46,6 +46,10 @@ class Appointment {
     this.status = 'upcoming',
     this.prescriptionText = '',
     this.doctorId = '',
+    this.patientName,
+    this.patientPhone,
+    this.rating,
+    this.review,
   });
 
   final String id;
@@ -58,6 +62,10 @@ class Appointment {
   final String status;
   final String prescriptionText;
   final String doctorId;
+  final String? patientName;
+  final String? patientPhone;
+  final int? rating;
+  final String? review;
 
   factory Appointment.fromApi(ApiAppointment a) => Appointment(
     id: a.id,
@@ -176,14 +184,22 @@ class AppState extends ChangeNotifier {
     required String email,
     required String password,
     required String specialty,
+    int experience = 0,
     int fee = 500,
+    String bio = '',
   }) async {
     if (name.trim().length < 2 || !email.contains('@') || password.length < 6) return false;
     _authLoading = true;
     _authError = null;
     notifyListeners();
     final result = await AuthApiService.doctorSignup(
-      name: name, email: email, password: password, specialty: specialty, fee: fee,
+      name: name, 
+      email: email, 
+      password: password, 
+      specialty: specialty,
+      experience: experience,
+      fee: fee,
+      bio: bio,
     );
     _authLoading = false;
     if (result.data == null) {

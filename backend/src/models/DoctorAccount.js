@@ -20,6 +20,8 @@ const doctorAccountSchema = new mongoose.Schema(
     rating: { type: Number, default: 0 },
     reviews: { type: Number, default: 0 },
     bio: { type: String, default: "" },
+    isVerified: { type: Boolean, default: false }, // Doctor verification status
+    licenseNumber: { type: String, default: "" }, // Medical license number
     phone: { type: String, default: "" },
     isOnline: { type: Boolean, default: false },
     lat: { type: Number, default: 0 },

@@ -1,4 +1,5 @@
 const DoctorAccount = require("../models/DoctorAccount");
+const Appointment = require("../models/Appointment");
 
 // ─── Haversine fallback ───────────────────────────────────────────
 function haversineKm(lat1, lon1, lat2, lon2) {
@@ -16,6 +17,7 @@ function doctorPublic(doc, distanceKm) {
   return {
     id: doc._id.toString(),
     name: doc.name,
+    email: doc.email, // Added for admin dashboard
     specialty: doc.specialty,
     imageUrl: doc.imageUrl,
     fee: doc.fee,
@@ -24,6 +26,8 @@ function doctorPublic(doc, distanceKm) {
     reviews: doc.reviews,
     bio: doc.bio,
     isOnline: doc.isOnline,
+    isVerified: doc.isVerified,
+    licenseNumber: doc.licenseNumber, // Added for admin dashboard
     lat: doc.lat,
     lng: doc.lng,
     availableSlots: doc.availableSlots,
@@ -31,14 +35,15 @@ function doctorPublic(doc, distanceKm) {
   };
 }
 
-// GET /api/doctors — list, filter by specialty/query
+// GET /api/doctors — list, filter by specialty/query (ONLY verified doctors)
 async function listDoctors(req, res) {
   const specialty = (req.query.specialty || "").toString().trim();
   const q = (req.query.q || "").toString().toLowerCase().trim();
   const page = Math.max(1, Number(req.query.page || 1));
   const limit = 20;
 
-  const filter = {};
+  // ONLY show verified doctors to patients
+  const filter = { isVerified: true };
   if (specialty) filter.specialty = { $regex: specialty, $options: "i" };
   if (q) filter.name = { $regex: q, $options: "i" };
 
@@ -54,7 +59,7 @@ async function listDoctors(req, res) {
   return res.json({ doctors: doctors.map((d) => doctorPublic(d)), total, page });
 }
 
-// GET /api/doctors/nearby
+// GET /api/doctors/nearby (ONLY verified doctors)
 async function nearbyDoctors(req, res) {
   const lat = Number(req.query.lat);
   const lng = Number(req.query.lng);
@@ -66,7 +71,9 @@ async function nearbyDoctors(req, res) {
 
   let doctors;
   try {
+    // ONLY fetch verified doctors
     doctors = await DoctorAccount.find({
+      isVerified: true,
       location: {
         $near: {
           $geometry: { type: "Point", coordinates: [lng, lat] },
@@ -76,7 +83,7 @@ async function nearbyDoctors(req, res) {
     }).select("-passwordHash").limit(30);
   } catch (_) {
     // fallback if 2dsphere index not yet built
-    const all = await DoctorAccount.find().select("-passwordHash");
+    const all = await DoctorAccount.find({ isVerified: true }).select("-passwordHash");
     doctors = all
       .map((d) => ({ doc: d, dist: haversineKm(lat, lng, d.lat, d.lng) }))
       .filter((x) => x.dist <= radiusKm)
@@ -105,6 +112,31 @@ async function getDoctorById(req, res) {
   return res.json({ doctor: doctorPublic(doc) });
 }
 
+// GET /api/doctors/admin/unverified (admin only)
+async function getUnverifiedDoctors(req, res) {
+  if (req.role !== "admin") {
+    return res.status(403).json({ message: "Admin access required" });
+  }
+  
+  const page = Math.max(1, Number(req.query.page || 1));
+  const limit = 50;
+  
+  const [doctors, total] = await Promise.all([
+    DoctorAccount.find({ isVerified: false })
+      .select("-passwordHash")
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .sort({ createdAt: -1 }),
+    DoctorAccount.countDocuments({ isVerified: false }),
+  ]);
+  
+  return res.json({ 
+    doctors: doctors.map((d) => doctorPublic(d)), 
+    total, 
+    page 
+  });
+}
+
 // PUT /api/doctors/:id/online  (doctor auth)
 async function toggleOnline(req, res) {
   if (req.userId !== req.params.id && req.role !== "doctor") {
@@ -119,4 +151,106 @@ async function toggleOnline(req, res) {
   return res.json({ doctor: doctorPublic(doc) });
 }
 
-module.exports = { listDoctors, nearbyDoctors, getSpecialties, getDoctorById, toggleOnline };
+// PUT /api/doctors/:id/verify  (admin auth)
+async function verifyDoctor(req, res) {
+  if (req.role !== "admin") {
+    return res.status(403).json({ message: "Admin access required" });
+  }
+  
+  const updateData = { 
+    isVerified: req.body.isVerified !== undefined ? req.body.isVerified : true,
+  };
+  
+  if (req.body.licenseNumber) {
+    updateData.licenseNumber = req.body.licenseNumber;
+  }
+  
+  const doc = await DoctorAccount.findByIdAndUpdate(
+    req.params.id,
+    updateData,
+    { new: true }
+  ).select("-passwordHash");
+  
+  if (!doc) return res.status(404).json({ message: "Doctor not found" });
+  return res.json({ doctor: doctorPublic(doc) });
+}
+
+// PUT /api/doctors/admin/bulk-verify  (admin auth)
+async function bulkVerifyDoctors(req, res) {
+  if (req.role !== "admin") {
+    return res.status(403).json({ message: "Admin access required" });
+  }
+  
+  const { doctorIds, verifyAll } = req.body;
+  
+  let result;
+  if (verifyAll === true) {
+    // Verify ALL unverified doctors
+    result = await DoctorAccount.updateMany(
+      { isVerified: false },
+      { isVerified: true }
+    );
+    return res.json({ 
+      message: `Verified ${result.modifiedCount} doctors`,
+      modifiedCount: result.modifiedCount 
+    });
+  } else if (Array.isArray(doctorIds)) {
+    // Verify specific doctors
+    result = await DoctorAccount.updateMany(
+      { _id: { $in: doctorIds } },
+      { isVerified: true }
+    );
+    return res.json({ 
+      message: `Verified ${result.modifiedCount} doctors`,
+      modifiedCount: result.modifiedCount 
+    });
+  }
+  
+  return res.status(400).json({ message: "Provide doctorIds array or verifyAll: true" });
+}
+
+// GET /api/doctors/:id/available-slots
+async function getDoctorSlots(req, res) {
+  const { date } = req.query;
+  
+  if (!date) {
+    return res.status(400).json({ message: "date query parameter is required (YYYY-MM-DD)" });
+  }
+  
+  // Find doctor
+  const doctor = await DoctorAccount.findById(req.params.id);
+  if (!doctor) {
+    return res.status(404).json({ message: "Doctor not found" });
+  }
+  
+  // Define standard time slots (9 AM to 5 PM)
+  const allSlots = [
+    "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
+    "12:00", "12:30", "13:00", "13:30", "14:00", "14:30",
+    "15:00", "15:30", "16:00", "16:30", "17:00"
+  ];
+  
+  // Find booked appointments for this date
+  const bookedAppointments = await Appointment.find({
+    doctorId: req.params.id,
+    dateLabel: { $regex: date, $options: "i" },
+    status: { $ne: "cancelled" }
+  });
+  
+  const bookedTimes = bookedAppointments.map(appt => appt.timeLabel);
+  
+  // Create slots with availability
+  const slots = allSlots.map(time => ({
+    time,
+    available: !bookedTimes.includes(time)
+  }));
+  
+  return res.json({
+    date,
+    doctorId: doctor._id.toString(),
+    doctorName: doctor.name,
+    slots
+  });
+}
+
+module.exports = { listDoctors, nearbyDoctors, getSpecialties, getDoctorById, toggleOnline, verifyDoctor, getUnverifiedDoctors, bulkVerifyDoctors, getDoctorSlots };

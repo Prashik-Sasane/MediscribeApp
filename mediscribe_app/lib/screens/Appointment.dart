@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mediscribe_app/core/app_state.dart';
+import 'package:mediscribe_app/screens/rate_appointment_screen.dart';
+import 'package:mediscribe_app/services/notification_service.dart';
 
 class AppointmentsScreen extends StatefulWidget {
   const AppointmentsScreen({super.key});
@@ -18,7 +20,44 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> with TickerProv
     // Load from backend on first open
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppScope.of(context).loadAppointments();
+      _checkForNewCompletions();
     });
+    
+    // Listen for tab changes to check for completions
+    _tabController.addListener(() {
+      if (_tabController.index == 1) { // Completed tab
+        _checkForNewCompletions();
+      }
+    });
+  }
+
+  void _checkForNewCompletions() {
+    final appState = AppScope.of(context);
+    final completed = appState.appointments.where((a) => a.status == 'completed').toList();
+    
+    for (final appointment in completed) {
+      // If appointment has no rating, show notification
+      if (appointment.rating == null) {
+        // Check if we already notified for this appointment
+        final existingNotifs = NotificationService.getNotifications();
+        final alreadyNotified = existingNotifs.any(
+          (n) => n.title == 'Appointment Completed' && n.message.contains(appointment.doctorName),
+        );
+        
+        if (!alreadyNotified) {
+          NotificationService.addNotification(
+            title: 'Appointment Completed',
+            message: 'Your appointment with Dr. ${appointment.doctorName} is complete. Rate your experience!',
+            type: NotificationType.success,
+            data: {
+              'appointmentId': appointment.id,
+              'doctorName': appointment.doctorName,
+              'action': 'rate_doctor',
+            },
+          );
+        }
+      }
+    }
   }
 
   @override
@@ -229,11 +268,53 @@ class _AppointmentActionCard extends StatelessWidget {
         ],
       );
     } else if (status == "completed") {
+      final isRated = appointment.rating != null;
       return Row(
         children: [
           Expanded(child: _outlineButton("Rebook", const Color(0xFF2E7DFF), null)),
           const SizedBox(width: 12),
-          Expanded(child: _filledButton("View E-Receipt", const Color(0xFF2E7DFF), null)),
+          Expanded(
+            child: isRated
+                ? Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Rated ${appointment.rating}★',
+                          style: const TextStyle(
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : _filledButton("Rate Doctor", const Color(0xFFFF9800), () {
+                    final appState = AppScope.of(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => RateAppointmentScreen(
+                          appointmentId: appointment.id,
+                          doctorName: appointment.doctorName,
+                          token: appState.token ?? '',
+                        ),
+                      ),
+                    ).then((rated) {
+                      if (rated == true) {
+                        appState.loadAppointments();
+                      }
+                    });
+                  }),
+          ),
         ],
       );
     } else {
