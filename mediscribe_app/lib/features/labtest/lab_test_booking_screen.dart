@@ -3,7 +3,9 @@ import '../../core/app_state.dart';
 import '../../models/lab_test.dart';
 import '../../services/lab_service.dart';
 import '../../services/auth_api_service.dart';
+import '../../services/payment_service.dart'; // Import PaymentService
 import '../../screens/cart_screen.dart'; // Reuse MyOrdersScreen for booking history
+import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
 
 import '../../widgets/healthcare/address_picker_sheet.dart';
 
@@ -92,6 +94,13 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
       return;
     }
 
+    if (_selectedAddress == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select an address for home collection")),
+      );
+      return;
+    }
+
     // Show Booking Confirmation Dialog
     final confirm = await showDialog<bool>(
       context: context,
@@ -106,6 +115,25 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
             const SizedBox(height: 8),
             Text("Price: \$${test.price}", style: const TextStyle(color: Colors.white70)),
             const SizedBox(height: 16),
+            const Text("Payment Method:", style: TextStyle(color: Colors.white54)),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2E7DFF).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF2E7DFF)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.credit_card, color: Color(0xFF2E7DFF)),
+                  const SizedBox(width: 8),
+                  const Text("Stripe (Card Payment)", 
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             const Text("This booking includes home collection and reports within 24 hours.", 
                 style: TextStyle(color: Colors.white54, fontSize: 12)),
           ],
@@ -118,7 +146,7 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2E7DFF)),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text("Confirm & Pay"),
+            child: const Text("Pay with Stripe"),
           ),
         ],
       ),
@@ -126,24 +154,99 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
 
     if (confirm != true) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Processing booking for ${test.name}...")),
-    );
-    
-    // Simulate booking success
-    await Future.delayed(const Duration(milliseconds: 1500));
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("${test.name} booked successfully!"),
-          backgroundColor: Colors.green,
+    // Show loading
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Processing payment...'),
+              ],
+            ),
+          ),
         ),
+      ),
+    );
+
+    try {
+      // Create booking first
+      final bookingId = await LabService.createBooking(
+        token: token,
+        labTestId: test.id,
+        address: _selectedAddress!,
+        preferredDate: DateTime.now().add(const Duration(days: 1)),
+        timeSlot: "Morning (7AM - 10AM)",
+        amount: test.price,
       );
-      // Navigate to My Orders/History
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const MyOrdersScreen()),
+
+      if (bookingId == null) {
+        Navigator.pop(context); // Close loading
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Failed to create booking")),
+          );
+        }
+        return;
+      }
+
+      // Process Stripe Payment
+      final result = await PaymentService.processStripePayment(
+        token: token,
+        amount: test.price.toDouble(),
+        orderType: 'lab_test',
+        orderId: bookingId,
+        publishableKey: 'pk_test_your_stripe_key_here', // Replace with your test key
       );
+
+      Navigator.pop(context); // Close loading
+
+      if (result['success'] == true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Payment successful! Test booked."),
+              backgroundColor: Colors.green,
+            ),
+          );
+          // Navigate to My Orders/History
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const MyOrdersScreen()),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? "Payment failed"),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      Navigator.pop(context); // Close loading
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 

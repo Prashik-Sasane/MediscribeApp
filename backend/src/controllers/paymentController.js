@@ -1,48 +1,39 @@
-const Razorpay = require("razorpay");
-const crypto = require("crypto");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const Order = require("../models/Order");
 const LabBooking = require("../models/LabBooking");
 
-// Initialize Razorpay
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
-
 /**
  * POST /api/payment/create-order
- * Create a Razorpay order for payment
+ * Create a Stripe PaymentIntent for payment
  */
 async function createPaymentOrder(req, res) {
   try {
-    const { amount, currency = "INR", receipt, orderType, orderId } = req.body;
+    const { amount, currency = 'usd', orderType, orderId } = req.body;
 
-    if (!amount || !receipt) {
-      return res.status(400).json({ message: "amount and receipt are required" });
+    if (!amount || !orderType || !orderId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "amount, orderType, and orderId are required" 
+      });
     }
 
-    // Create Razorpay order
-    const options = {
-      amount: Math.round(amount * 100), // Convert to paise
+    // Create Stripe PaymentIntent
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100), // Convert to cents
       currency,
-      receipt,
-      payment_capture: 1, // Auto-capture
-      notes: {
+      metadata: {
         orderType,
-        orderId,
+        orderId: orderId.toString(),
       },
-    };
-
-    const razorpayOrder = await razorpay.orders.create(options);
+    });
 
     return res.json({
       success: true,
-      razorpayOrderId: razorpayOrder.id,
-      amount: razorpayOrder.amount,
-      currency: razorpayOrder.currency,
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id,
     });
   } catch (error) {
-    console.error("Error creating Razorpay order:", error);
+    console.error("Error creating Stripe PaymentIntent:", error);
     return res.status(500).json({ 
       success: false, 
       message: "Failed to create payment order" 
@@ -52,75 +43,67 @@ async function createPaymentOrder(req, res) {
 
 /**
  * POST /api/payment/verify
- * Verify Razorpay payment signature
+ * Verify Stripe payment after completion
  */
 async function verifyPayment(req, res) {
   try {
     const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
+      paymentIntentId,
       orderId,
       orderType,
     } = req.body;
 
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    if (!paymentIntentId || !orderId || !orderType) {
       return res.status(400).json({ 
         success: false, 
         message: "Missing payment details" 
       });
     }
 
-    // Verify signature
-    const sign = razorpay_order_id + "|" + razorpay_payment_id;
-    const expectedSign = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-      .update(sign.toString())
-      .digest("hex");
+    // Retrieve payment intent from Stripe
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
-    if (razorpay_signature !== expectedSign) {
+    if (paymentIntent.status === 'succeeded') {
+      // Update order based on type
+      if (orderType === "pharmacy") {
+        const order = await Order.findById(orderId);
+        if (!order) {
+          return res.status(404).json({ message: "Order not found" });
+        }
+
+        order.paymentStatus = "paid";
+        order.paymentMethod = "stripe";
+        order.stripePaymentIntentId = paymentIntentId;
+        order.status = "confirmed";
+        order.trackingHistory.push({
+          status: "Payment Confirmed",
+          note: `Payment verified via Stripe. Payment Intent: ${paymentIntentId}`,
+        });
+        await order.save();
+      } else if (orderType === "lab_test") {
+        const booking = await LabBooking.findById(orderId);
+        if (!booking) {
+          return res.status(404).json({ message: "Booking not found" });
+        }
+
+        booking.paymentStatus = "paid";
+        booking.paymentMethod = "stripe";
+        booking.stripePaymentIntentId = paymentIntentId;
+        booking.status = "confirmed";
+        await booking.save();
+      }
+
+      return res.json({
+        success: true,
+        message: "Payment verified successfully",
+        paymentId: paymentIntentId,
+      });
+    } else {
       return res.status(400).json({ 
         success: false, 
-        message: "Invalid payment signature" 
+        message: "Payment not completed" 
       });
     }
-
-    // Update order based on type
-    if (orderType === "pharmacy") {
-      const order = await Order.findById(orderId);
-      if (!order) {
-        return res.status(404).json({ message: "Order not found" });
-      }
-
-      order.paymentStatus = "paid";
-      order.paymentMethod = "razorpay";
-      order.razorpayOrderId = razorpay_order_id;
-      order.razorpayPaymentId = razorpay_payment_id;
-      order.status = "confirmed";
-      order.trackingHistory.push({
-        status: "Payment Confirmed",
-        note: `Payment verified. Payment ID: ${razorpay_payment_id}`,
-      });
-      await order.save();
-    } else if (orderType === "lab_test") {
-      const booking = await LabBooking.findById(orderId);
-      if (!booking) {
-        return res.status(404).json({ message: "Booking not found" });
-      }
-
-      booking.paymentStatus = "paid";
-      booking.paymentMethod = "razorpay";
-      booking.razorpayOrderId = razorpay_order_id;
-      booking.razorpayPaymentId = razorpay_payment_id;
-      booking.status = "confirmed";
-      await booking.save();
-    }
-
-    return res.json({
-      success: true,
-      message: "Payment verified successfully",
-      paymentId: razorpay_payment_id,
-    });
   } catch (error) {
     console.error("Error verifying payment:", error);
     return res.status(500).json({ 
@@ -132,51 +115,54 @@ async function verifyPayment(req, res) {
 
 /**
  * POST /api/payment/webhook
- * Handle Razorpay webhook events
+ * Handle Stripe webhook events
  */
 async function paymentWebhook(req, res) {
+  const sig = req.headers['stripe-signature'];
+  
   try {
-    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
-    const webhookSignature = req.headers["x-razorpay-signature"];
+    const event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
 
-    // Verify webhook signature
-    const expectedSignature = crypto
-      .createHmac("sha256", webhookSecret)
-      .update(JSON.stringify(req.body))
-      .digest("hex");
+    // Handle the event
+    switch (event.type) {
+      case 'payment_intent.succeeded':
+        const paymentIntent = event.data.object;
+        const orderId = paymentIntent.metadata.orderId;
+        const orderType = paymentIntent.metadata.orderType;
 
-    if (expectedSignature !== webhookSignature) {
-      return res.status(400).json({ message: "Invalid webhook signature" });
-    }
-
-    const event = req.body;
-
-    // Handle payment captured event
-    if (event.event === "payment.captured") {
-      const payment = event.payload.payment.entity;
-      const orderId = payment.notes.orderId;
-      const orderType = payment.notes.orderType;
-
-      console.log(`Payment captured for ${orderType} order: ${orderId}`);
+        console.log(`PaymentIntent succeeded for ${orderType} order: ${orderId}`);
+        
+        // Update order status (webhook is backup, primary update happens in verifyPayment)
+        if (orderType === "pharmacy" && orderId) {
+          await Order.findByIdAndUpdate(orderId, {
+            paymentStatus: "paid",
+            status: "confirmed",
+          });
+        } else if (orderType === "lab_test" && orderId) {
+          await LabBooking.findByIdAndUpdate(orderId, {
+            paymentStatus: "paid",
+            status: "confirmed",
+          });
+        }
+        break;
       
-      // Update order status (webhook is backup, primary update happens in verifyPayment)
-      if (orderType === "pharmacy" && orderId) {
-        await Order.findByIdAndUpdate(orderId, {
-          paymentStatus: "paid",
-          status: "confirmed",
-        });
-      } else if (orderType === "lab_test" && orderId) {
-        await LabBooking.findByIdAndUpdate(orderId, {
-          paymentStatus: "paid",
-          status: "confirmed",
-        });
-      }
+      case 'payment_intent.payment_failed':
+        const failedIntent = event.data.object;
+        console.log(`PaymentIntent failed: ${failedIntent.id}`);
+        break;
+      
+      default:
+        console.log(`Unhandled event type ${event.type}`);
     }
 
     return res.status(200).json({ received: true });
   } catch (error) {
     console.error("Webhook error:", error);
-    return res.status(500).json({ message: "Webhook processing failed" });
+    return res.status(400).json({ message: "Webhook verification failed" });
   }
 }
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
@@ -34,6 +35,7 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
   final _remoteRenderer = RTCVideoRenderer();
 
   late IO.Socket _socket;
+  bool _socketConnected = false;
 
   bool _isCallConnected = false;
   bool _isMuted = false;
@@ -44,6 +46,7 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
 
   List<RTCIceCandidate> _pendingCandidates = [];
   bool _remoteDescSet = false;
+  Completer<void>? _socketCompleter;
 
   @override
   void initState() {
@@ -53,31 +56,59 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
 
   // ================= INIT =================
   Future<void> _init() async {
+    print('[WebRTC] Starting initialization...');
     await _requestPermissions();
 
     await _localRenderer.initialize();
     await _remoteRenderer.initialize();
 
+    _setupSocket();
+    
+    // Wait for socket connection before proceeding
+    print('[WebRTC] Waiting for socket connection...');
+    await _waitForSocketConnection();
+    print('[WebRTC] Socket connected, proceeding with call setup');
+
     _peerConnection = await createPeerConnection({
       'iceServers': [
         {'urls': 'stun:stun.l.google.com:19302'},
+        {'urls': 'stun:stun1.l.google.com:19302'},
         {
           'urls': 'turn:openrelay.metered.ca:80',
           'username': 'openrelayproject',
           'credential': 'openrelayproject',
-        }
+        },
+        {
+          'urls': 'turn:openrelay.metered.ca:443',
+          'username': 'openrelayproject',
+          'credential': 'openrelayproject',
+        },
       ]
     });
 
     _setupPeerConnection();
-    _setupSocket();
     await _getLocalMedia();
 
     if (widget.isIncoming && widget.incomingOffer != null) {
+      print('[WebRTC] Handling incoming call');
       await _handleIncoming(widget.incomingOffer!);
     } else {
+      print('[WebRTC] Starting outgoing call');
       await _startCall();
     }
+  }
+
+  Future<void> _waitForSocketConnection() async {
+    if (_socketConnected) return;
+    
+    _socketCompleter = Completer<void>();
+    await _socketCompleter!.future.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        print('[WebRTC] Socket connection timeout');
+        throw Exception('Socket connection timeout');
+      },
+    );
   }
 
   // ================= PERMISSIONS =================
@@ -90,6 +121,7 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
 
   // ================= LOCAL MEDIA =================
   Future<void> _getLocalMedia() async {
+    print('[WebRTC] Getting local media...');
     _localStream = await navigator.mediaDevices.getUserMedia({
       'audio': true,
       'video': {
@@ -98,48 +130,68 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
     });
 
     _localRenderer.srcObject = _localStream;
+    print('[WebRTC] Local stream obtained with ${_localStream!.getTracks().length} tracks');
 
     for (var track in _localStream!.getTracks()) {
-      _peerConnection.addTrack(track, _localStream!);
+      await _peerConnection.addTrack(track, _localStream!);
+      print('[WebRTC] Added local track: ${track.kind}');
     }
   }
 
   // ================= PEER =================
   void _setupPeerConnection() {
+    print('[WebRTC] Setting up peer connection...');
+    
     _peerConnection.onTrack = (event) async {
-      print("TRACK RECEIVED: ${event.track.kind}");
+      print('[WebRTC] TRACK RECEIVED: ${event.track.kind}');
+      print('[WebRTC] Streams count: ${event.streams.length}');
 
       if (event.streams.isNotEmpty) {
-        print("STREAM FOUND");
-        _remoteStream = event.streams[0];
-        _remoteRenderer.srcObject = _remoteStream;
+        final remoteStream = event.streams[0];
+        print('[WebRTC] Using stream with ${remoteStream.getTracks().length} tracks');
+        
+        setState(() {
+          _remoteStream = remoteStream;
+          _remoteRenderer.srcObject = _remoteStream;
+          _isCallConnected = true;
+        });
+        
+        print('[WebRTC] Remote video stream assigned to renderer');
       } else {
-        print("NO STREAM → USING TRACK FALLBACK");
-        _remoteStream ??= await createLocalMediaStream("remoteStream");
-        _remoteStream!.addTrack(event.track);
-        _remoteRenderer.srcObject = _remoteStream;
+        print('[WebRTC] No streams in event, creating fallback stream');
+        final fallbackStream = await createLocalMediaStream('remoteFallback');
+        fallbackStream.addTrack(event.track);
+        
+        setState(() {
+          _remoteStream = fallbackStream;
+          _remoteRenderer.srcObject = _remoteStream;
+          _isCallConnected = true;
+        });
       }
-
-      setState(() {
-        _isCallConnected = true;
-      });
 
       _startTimer();
     };
 
     _peerConnection.onConnectionState = (state) {
-      print("CONNECTION STATE: $state");
+      print('[WebRTC] CONNECTION STATE: $state');
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+        print('[WebRTC] Call connected successfully');
         setState(() => _isCallConnected = true);
       } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
           state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
           state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+        print('[WebRTC] Call ended: $state');
         _endLocal();
       }
     };
 
+    _peerConnection.onIceConnectionState = (state) {
+      print('[WebRTC] ICE CONNECTION STATE: $state');
+    };
+
     _peerConnection.onIceCandidate = (c) {
       if (c.candidate != null) {
+        print('[WebRTC] Sending ICE candidate: ${c.sdpMid}');
         _socket.emit('ice-candidate', {
           'to': widget.targetUserId,
           'candidate': c.toMap(),
@@ -150,77 +202,126 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
 
   // ================= SOCKET =================
   void _setupSocket() {
-    _socket = IO.io('https://mediscribeapp.onrender.com/', {
+    print('[WebRTC] Setting up socket connection...');
+    _socket = IO.io('https://mediscribeapp.onrender.com', {
       'transports': ['websocket'],
       'autoConnect': true,
     });
 
     _socket.onConnect((_) {
-      print("Connected to server");
-  // replace dynamically
-       _socket.emit("register", widget.userId);
+      print('[WebRTC] Socket connected successfully');
+      _socketConnected = true;
+      _socket.emit('register', widget.userId);
+      
+      // Complete the socket connection waiter
+      if (_socketCompleter != null && !_socketCompleter!.isCompleted) {
+        _socketCompleter!.complete();
+      }
+    });
+
+    _socket.onDisconnect((_) {
+      print('[WebRTC] Socket disconnected');
+      _socketConnected = false;
     });
 
     _socket.on('call-accepted', (data) async {
-      await _peerConnection.setRemoteDescription(
-        RTCSessionDescription(
-          data['answer']['sdp'],
-          data['answer']['type'],
-        ),
-      );
+      print('[WebRTC] Call accepted, setting remote description');
+      try {
+        await _peerConnection.setRemoteDescription(
+          RTCSessionDescription(
+            data['answer']['sdp'],
+            data['answer']['type'],
+          ),
+        );
+        print('[WebRTC] Remote description set successfully');
+        _remoteDescSet = true;
 
-      _remoteDescSet = true;
-
-      for (var c in _pendingCandidates) {
-        await _peerConnection.addCandidate(c);
+        // Apply pending ICE candidates
+        print('[WebRTC] Applying ${_pendingCandidates.length} pending ICE candidates');
+        for (var c in _pendingCandidates) {
+          await _peerConnection.addCandidate(c);
+        }
+        _pendingCandidates.clear();
+        print('[WebRTC] All pending ICE candidates applied');
+      } catch (e) {
+        print('[WebRTC] Error setting remote description: $e');
       }
-      _pendingCandidates.clear();
     });
 
     _socket.on('ice-candidate', (data) async {
-      final c = RTCIceCandidate(
-        data['candidate']['candidate'],
-        data['candidate']['sdpMid'],
-        data['candidate']['sdpMLineIndex'],
-      );
+      try {
+        final candidate = RTCIceCandidate(
+          data['candidate']['candidate'],
+          data['candidate']['sdpMid'],
+          data['candidate']['sdpMLineIndex'],
+        );
 
-      if (_remoteDescSet) {
-        await _peerConnection.addCandidate(c);
-      } else {
-        _pendingCandidates.add(c);
+        print('[WebRTC] Received ICE candidate: ${candidate.sdpMid}');
+
+        if (_remoteDescSet) {
+          await _peerConnection.addCandidate(candidate);
+          print('[WebRTC] ICE candidate added immediately');
+        } else {
+          _pendingCandidates.add(candidate);
+          print('[WebRTC] ICE candidate queued (${_pendingCandidates.length} pending)');
+        }
+      } catch (e) {
+        print('[WebRTC] Error adding ICE candidate: $e');
       }
     });
 
     _socket.on('end-call', (_) {
+      print('[WebRTC] Call ended by remote');
       _endLocal();
     });
   }
 
   // ================= CALL =================
   Future<void> _startCall() async {
+    print('[WebRTC] Creating offer...');
     final offer = await _peerConnection.createOffer();
     await _peerConnection.setLocalDescription(offer);
+    print('[WebRTC] Offer created and local description set');
 
     _socket.emit('call-user', {
       'to': widget.targetUserId,
       'offer': offer.toMap(),
+      'callerName': widget.targetName,
+      'callerRole': 'doctor',
     });
+    print('[WebRTC] Offer sent to ${widget.targetUserId}');
   }
 
   Future<void> _handleIncoming(Map offer) async {
-    await _peerConnection.setRemoteDescription(
-      RTCSessionDescription(offer['sdp'], offer['type']),
-    );
+    print('[WebRTC] Handling incoming offer...');
+    try {
+      await _peerConnection.setRemoteDescription(
+        RTCSessionDescription(offer['sdp'], offer['type']),
+      );
+      print('[WebRTC] Remote description (offer) set successfully');
+      _remoteDescSet = true;
 
-    _remoteDescSet = true;
+      final answer = await _peerConnection.createAnswer();
+      await _peerConnection.setLocalDescription(answer);
+      print('[WebRTC] Answer created and local description set');
 
-    final answer = await _peerConnection.createAnswer();
-    await _peerConnection.setLocalDescription(answer);
+      _socket.emit('accept-call', {
+        'to': widget.targetUserId,
+        'answer': answer.toMap(),
+      });
+      print('[WebRTC] Answer sent to ${widget.targetUserId}');
 
-    _socket.emit('accept-call', {
-      'to': widget.targetUserId,
-      'answer': answer.toMap(),
-    });
+      // Apply any pending ICE candidates
+      if (_pendingCandidates.isNotEmpty) {
+        print('[WebRTC] Applying ${_pendingCandidates.length} pending ICE candidates');
+        for (var c in _pendingCandidates) {
+          await _peerConnection.addCandidate(c);
+        }
+        _pendingCandidates.clear();
+      }
+    } catch (e) {
+      print('[WebRTC] Error handling incoming call: $e');
+    }
   }
 
   // ================= TIMER =================

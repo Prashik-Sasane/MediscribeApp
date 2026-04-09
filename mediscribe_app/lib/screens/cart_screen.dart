@@ -1,9 +1,11 @@
-// This file should ideally be created or updated to show orders if it's currently a cart
 import 'package:flutter/material.dart';
 import 'package:mediscribe_app/core/app_state.dart';
+import 'package:mediscribe_app/services/cart_service.dart';
 import 'package:mediscribe_app/services/order_service.dart';
+import 'package:mediscribe_app/services/payment_service.dart';
 import 'package:mediscribe_app/widgets/healthcare/order_card.dart';
 import 'package:mediscribe_app/widgets/healthcare/order_tracking_sheet.dart';
+import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
 
 class MyOrdersScreen extends StatefulWidget {
   const MyOrdersScreen({super.key});
@@ -77,6 +79,298 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                     );
                   },
                 ),
+    );
+  }
+}
+
+// Cart Screen with CartService integration
+class CartScreen extends StatefulWidget {
+  const CartScreen({super.key});
+
+  @override
+  State<CartScreen> createState() => _CartScreenState();
+}
+
+class _CartScreenState extends State<CartScreen> {
+  List<CartItem> _cartItems = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCart();
+  }
+
+  Future<void> _loadCart() async {
+    setState(() => _isLoading = true);
+    final items = await CartService.getCartItems();
+    setState(() {
+      _cartItems = items;
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _updateQuantity(String productId, int quantity) async {
+    await CartService.updateQuantity(productId, quantity);
+    await _loadCart();
+  }
+
+  Future<void> _removeItem(String productId) async {
+    await CartService.removeFromCart(productId);
+    await _loadCart();
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Item removed from cart'),
+          backgroundColor: Color(0xFF2E7DFF),
+        ),
+      );
+    }
+  }
+
+  Future<void> _checkout() async {
+    final state = AppScope.of(context);
+    final token = state.token;
+
+    if (token == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please login to checkout')),
+      );
+      return;
+    }
+
+    if (_cartItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Your cart is empty')),
+      );
+      return;
+    }
+
+    // Calculate totals
+    final subtotal = _cartItems.fold(0, (sum, item) => sum + item.totalPrice);
+    final total = subtotal;
+
+    // Show payment confirmation dialog
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text('Confirm Order', style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Total: \$${total.toStringAsFixed(2)}',
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Payment Method:',
+              style: TextStyle(color: Colors.white54),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2E7DFF).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF2E7DFF)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.credit_card, color: Color(0xFF2E7DFF)),
+                  SizedBox(width: 8),
+                  Text(
+                    'Stripe (Card Payment)',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2E7DFF),
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Pay with Stripe'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // Show loading
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Processing payment...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      // Create order
+      final items = _cartItems
+          .map((item) => OrderItem(
+                productId: item.product.id,
+                name: item.product.name,
+                qty: item.quantity,
+                price: item.product.price,
+              ))
+          .toList();
+
+      final orderId = await OrderService.createOrder(
+        token: token,
+        items: items,
+        total: total.toInt(),
+      );
+
+      if (orderId == null) {
+        Navigator.pop(context);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to create order')),
+          );
+        }
+        return;
+      }
+
+      // Process Stripe Payment
+      final result = await PaymentService.processStripePayment(
+        token: token,
+        amount: total.toDouble(),
+        orderType: 'pharmacy',
+        orderId: orderId,
+        publishableKey: 'pk_test_51TKLGCA0vwEId8d1ChT5p251LabT0MZ61Hlq4Jq233SOHNEa6yM80fDFRYOqfXDaHtFn8BredvwBtH974pt3olZu00Sn9lvWwp',
+      );
+
+      Navigator.pop(context);
+
+      if (result['success'] == true) {
+        // Clear cart
+        await CartService.clearCart();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Payment successful! Order placed.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          
+          // Navigate to My Orders
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const MyOrdersScreen()),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? 'Payment failed'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F172A),
+      appBar: AppBar(
+        title: const Text(
+          'Shopping Cart',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF2E7DFF)))
+          : _cartItems.isEmpty
+              ? const _EmptyCart()
+              : ListView.builder(
+                  padding: const EdgeInsets.all(20),
+                  itemCount: _cartItems.length,
+                  itemBuilder: (context, index) {
+                    final item = _cartItems[index];
+                    return _CartItemCard(
+                      name: item.product.name,
+                      imageUrl: item.product.imageUrl != null && item.product.imageUrl!.isNotEmpty 
+                          ? item.product.imageUrl! 
+                          : '',
+                      price: item.product.price,
+                      mrp: (item.product.price * 1.2).toInt(),
+                      quantity: item.quantity,
+                      onMinus: () => _updateQuantity(
+                        item.product.id,
+                        item.quantity - 1,
+                      ),
+                      onPlus: () => _updateQuantity(
+                        item.product.id,
+                        item.quantity + 1,
+                      ),
+                      onRemove: () => _removeItem(item.product.id),
+                    );
+                  },
+                ),
+      bottomNavigationBar: _cartItems.isNotEmpty
+          ? _CheckoutBar(
+              subtotal: _cartItems.fold(0, (sum, item) => sum + item.totalPrice),
+              itemCount: _cartItems.fold(0, (sum, item) => sum + item.quantity),
+              onCheckout: _checkout,
+            )
+          : null,
     );
   }
 }
@@ -189,7 +483,7 @@ class _CartItemCard extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      '₹$price',
+                      '\$$price',
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
@@ -197,7 +491,7 @@ class _CartItemCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      '₹$mrp',
+                      '\$$mrp',
                       style: const TextStyle(
                         color: Colors.white54,
                         decoration: TextDecoration.lineThrough,
@@ -305,7 +599,7 @@ class _CheckoutBar extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '₹$subtotal',
+                    '\$$subtotal',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,

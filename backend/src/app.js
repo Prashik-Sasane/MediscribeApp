@@ -18,6 +18,12 @@ app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE"]
 }));
+
+// Stripe webhook needs raw body before JSON parser
+const { paymentWebhook } = require("./controllers/paymentController");
+app.post("/api/payment/webhook", express.raw({ type: "application/json" }), paymentWebhook);
+
+// JSON body parser for all other routes
 app.use(express.json());
 
 app.get("/", (_req, res) => {
@@ -54,6 +60,7 @@ app.get("/", (_req, res) => {
       "/api/search",
       "/api/payment/create-order",
       "/api/payment/verify",
+      "/api/payment/webhook",
     ],
   });
 });

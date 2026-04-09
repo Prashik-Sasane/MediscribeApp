@@ -3,6 +3,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const app = require("./app");
 const { connectDatabase } = require("./config/db");
+const Message = require("./models/Message");
 
 const PORT = Number(process.env.PORT || 5000);
 
@@ -71,12 +72,60 @@ async function start() {
     socket.on("ice-candidate", ({ to, candidate }) => {
       if (!to) return;
 
+      console.log(`🧊 ICE from ${socket.userId} to ${to}:`, candidate?.sdpMid || 'unknown');
+
       io.to(to).emit("ice-candidate", {
         from: socket.userId,
         candidate,
       });
+    });
 
-      console.log(`🧊 ICE ${socket.userId} → ${to}`);
+    // ================= CHAT =================
+    socket.on("join-chat", ({ appointmentId }) => {
+      if (!appointmentId) return;
+      
+      const roomName = `chat_${appointmentId}`;
+      socket.join(roomName);
+      console.log(`💬 ${socket.userId} joined chat room: ${roomName}`);
+    });
+
+    socket.on("send-message", async ({ appointmentId, text, senderName, senderRole }) => {
+      if (!appointmentId || !text) return;
+
+      try {
+        // Store message in MongoDB
+        const message = await Message.create({
+          appointmentId,
+          senderId: socket.userId,
+          senderName: senderName || 'Unknown',
+          senderRole: senderRole || 'patient',
+          text,
+        });
+
+        console.log(`💬 Message saved: ${message._id}`);
+
+        // Broadcast to chat room
+        const roomName = `chat_${appointmentId}`;
+        io.to(roomName).emit("receive-message", {
+          id: message._id.toString(),
+          text: message.text,
+          senderName: message.senderName,
+          senderRole: message.senderRole,
+          createdAt: message.createdAt,
+        });
+
+        console.log(`💬 Message broadcasted to ${roomName}`);
+      } catch (error) {
+        console.error('❌ Error saving message:', error);
+      }
+    });
+
+    socket.on("leave-chat", ({ appointmentId }) => {
+      if (!appointmentId) return;
+      
+      const roomName = `chat_${appointmentId}`;
+      socket.leave(roomName);
+      console.log(`💬 ${socket.userId} left chat room: ${roomName}`);
     });
 
     // ================= END CALL =================

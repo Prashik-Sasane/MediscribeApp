@@ -42,6 +42,37 @@ class OrderService {
     }
   }
 
+  /// Create order and return the order ID
+  static Future<String?> createOrder({
+    required String token,
+    required List<OrderItem> items,
+    required int total,
+    String address = '',
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/orders'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'items': items.map((e) => e.toJson()).toList(),
+          'total': total,
+          'address': address,
+        }),
+      );
+      
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final json = jsonDecode(response.body) as Map<String, dynamic>;
+        return json['order']?['_id'] ?? json['order']?['id'];
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<List<Map<String, dynamic>>> fetchMyOrders(String token) async {
     try {
       final response = await http.get(

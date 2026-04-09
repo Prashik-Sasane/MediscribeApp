@@ -5,7 +5,10 @@ import '../../models/product.dart';
 import '../../services/product_service.dart';
 import '../../services/order_service.dart';
 import '../../services/auth_api_service.dart'; // Import AuthApiService
-import '../../screens/cart_screen.dart'; // Import MyOrdersScreen
+import '../../services/payment_service.dart'; // Import PaymentService
+import '../../services/cart_service.dart'; // Import CartService
+import '../../screens/cart_screen.dart'; // Import CartScreen & MyOrdersScreen
+import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
 
 import '../../widgets/healthcare/product_card.dart';
 import '../../widgets/healthcare/address_picker_sheet.dart';
@@ -52,6 +55,7 @@ class _UltraHealthShopState extends State<UltraHealthShop> {
     super.initState();
     _fetchProducts();
     _fetchDefaultAddress();
+    _loadCartFromService();
     _pageController = PageController(initialPage: 0);
     _bannerTimer = Timer.periodic(const Duration(seconds: 4), (Timer timer) {
       if (_currentBannerPage < 2) {
@@ -64,6 +68,19 @@ class _UltraHealthShopState extends State<UltraHealthShop> {
         duration: const Duration(milliseconds: 800),
         curve: Curves.easeInOutCubic,
       );
+    });
+  }
+
+  Future<void> _loadCartFromService() async {
+    final cartItems = await CartService.getCartItems();
+    final cartCount = await CartService.getCartCount();
+    final cartTotal = await CartService.getCartTotal();
+    
+    setState(() {
+      _cartItems.clear();
+      _cartItems.addAll(cartItems.map((item) => item.product));
+      this.cartCount = cartCount;
+      totalPrice = cartTotal.toDouble();
     });
   }
 
@@ -112,17 +129,33 @@ class _UltraHealthShopState extends State<UltraHealthShop> {
     _fetchProducts(query: q, category: categories[activeCategory]);
   }
 
-  void _addToCart(Product product) {
+  void _addToCart(Product product) async {
+    // Add to CartService (SharedPreferences)
+    await CartService.addToCart(product);
+    
+    // Update local state for UI
     setState(() {
       _cartItems.add(product);
       cartCount = _cartItems.length;
       totalPrice += product.price;
     });
+    
+    // Show success message
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text("${product.name} added to cart"),
         duration: const Duration(seconds: 1),
         backgroundColor: const Color(0xFF2E7DFF),
+        action: SnackBarAction(
+          label: 'View Cart',
+          textColor: Colors.white,
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CartScreen()),
+            );
+          },
+        ),
       ),
     );
   }
@@ -134,6 +167,13 @@ class _UltraHealthShopState extends State<UltraHealthShop> {
     if (token == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please login to place order")),
+      );
+      return;
+    }
+
+    if (_cartItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Your cart is empty")),
       );
       return;
     }
@@ -151,11 +191,24 @@ class _UltraHealthShopState extends State<UltraHealthShop> {
             Text("Total: \$${totalPrice.toStringAsFixed(2)}", 
                 style: const TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
-            const Text("Select Payment Method:", style: TextStyle(color: Colors.white54)),
+            const Text("Payment Method:", style: TextStyle(color: Colors.white54)),
             const SizedBox(height: 8),
-            _paymentMethodTile(Icons.account_balance_wallet_rounded, "UPI / Wallet"),
-            _paymentMethodTile(Icons.credit_card_rounded, "Credit / Debit Card"),
-            _paymentMethodTile(Icons.money_rounded, "Cash on Delivery"),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2E7DFF).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF2E7DFF)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.credit_card, color: Color(0xFF2E7DFF)),
+                  const SizedBox(width: 8),
+                  const Text("Stripe (Card Payment)", 
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
           ],
         ),
         actions: [
@@ -166,7 +219,7 @@ class _UltraHealthShopState extends State<UltraHealthShop> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2E7DFF)),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text("Pay & Order"),
+            child: const Text("Pay with Stripe"),
           ),
         ],
       ),
@@ -174,39 +227,106 @@ class _UltraHealthShopState extends State<UltraHealthShop> {
 
     if (confirm != true) return;
 
-    final items = _cartItems.map((p) => OrderItem(
-      productId: p.id,
-      name: p.name,
-      qty: 1,
-      price: p.price,
-    )).toList();
-
-    final success = await OrderService.placeOrder(
-      token: token,
-      items: items,
-      total: totalPrice.toInt(),
+    // Show loading
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Processing payment...'),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
 
-    if (success) {
-      setState(() {
-        _cartItems.clear();
-        cartCount = 0;
-        totalPrice = 0.0;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Order placed successfully!")),
-        );
-        // Navigate to My Orders
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const MyOrdersScreen()),
-        );
+    try {
+      // Create order first to get orderId
+      final items = _cartItems.map((p) => OrderItem(
+        productId: p.id,
+        name: p.name,
+        qty: 1,
+        price: p.price,
+      )).toList();
+
+      final orderId = await OrderService.createOrder(
+        token: token,
+        items: items,
+        total: totalPrice.toInt(),
+      );
+
+      if (orderId == null) {
+        Navigator.pop(context); // Close loading
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Failed to create order")),
+          );
+        }
+        return;
       }
-    } else {
+
+      // Process Stripe Payment
+      final result = await PaymentService.processStripePayment(
+        token: token,
+        amount: totalPrice,
+        orderType: 'pharmacy',
+        orderId: orderId,
+        publishableKey: 'pk_test_your_stripe_key_here', // Replace with your test key
+      );
+
+      Navigator.pop(context); // Close loading
+
+      if (result['success'] == true) {
+        setState(() {
+          _cartItems.clear();
+          cartCount = 0;
+          totalPrice = 0.0;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Payment successful! Order placed."),
+              backgroundColor: Colors.green,
+            ),
+          );
+          // Navigate to My Orders
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const MyOrdersScreen()),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? "Payment failed"),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      Navigator.pop(context); // Close loading
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Failed to place order")),
+          SnackBar(
+            content: Text("Error: $e"),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -553,7 +673,12 @@ class _UltraHealthShopState extends State<UltraHealthShop> {
       duration: const Duration(milliseconds: 400),
       bottom: 20, left: 20, right: 20,
       child: InkWell(
-        onTap: _placeOrder,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const CartScreen()),
+          ).then((_) => _loadCartFromService()); // Reload cart when returning
+        },
         child: Container(
           height: 65,
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -571,7 +696,7 @@ class _UltraHealthShopState extends State<UltraHealthShop> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text("$cartCount Items in Cart", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  const Text("Tap to Place Order", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  const Text("Tap to Checkout", style: TextStyle(color: Colors.white70, fontSize: 12)),
                 ],
               ),
               const Spacer(),

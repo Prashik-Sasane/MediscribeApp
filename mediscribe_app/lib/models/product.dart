@@ -27,19 +27,34 @@ class Product {
 
   double get discount => mrp > 0 ? ((mrp - price) / mrp * 100) : 0;
 
+  static int _parseInt(dynamic value) {
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  static bool _parseBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is String) return value.toLowerCase() == 'true';
+    return false;
+  }
+
   factory Product.fromJson(Map<String, dynamic> json) {
     return Product(
       id: (json['id'] ?? '').toString(),
       name: (json['name'] ?? '').toString(),
       category: (json['category'] ?? '').toString(),
-      price: (json['price'] as num?)?.toInt() ?? 0,
-      mrp: (json['mrp'] as num?)?.toInt() ?? 0,
+      price: _parseInt(json['price']),
+      mrp: _parseInt(json['mrp']),
       imageUrl: (json['imageUrl'] ?? '').toString(),
-      tags: (json['tags'] as List<dynamic>? ?? []).map((e) => e.toString()).toList(),
-      requiresPrescription: (json['requiresPrescription'] as bool?) ?? false,
+      tags: (json['tags'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          (json['tags'] != null ? [json['tags'].toString()] : []),
+      requiresPrescription: _parseBool(json['requiresPrescription']),
       description: (json['description'] ?? '').toString(),
       manufacturer: (json['manufacturer'] ?? '').toString(),
-      stock: (json['stock'] as num?)?.toInt() ?? 0,
+      stock: _parseInt(json['stock']),
     );
   }
 

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter_stripe/flutter_stripe.dart';
 
 class PaymentService {
   static const String _baseUrl = String.fromEnvironment(
@@ -7,10 +8,15 @@ class PaymentService {
     defaultValue: 'https://mediscribeapp.onrender.com/api',
   );
 
-  /// Create Razorpay order
-  static Future<Map<String, dynamic>?> createRazorpayOrder({
+  /// Initialize Stripe with publishable key
+  static void initializeStripe(String publishableKey) {
+    Stripe.publishableKey = publishableKey;
+  }
+
+  /// Create Stripe PaymentIntent
+  static Future<Map<String, dynamic>?> createStripePayment({
     required String token,
-    required int amount,
+    required double amount,
     required String orderType,
     required String orderId,
   }) async {
@@ -23,8 +29,7 @@ class PaymentService {
         },
         body: jsonEncode({
           'amount': amount,
-          'currency': 'INR',
-          'receipt': 'order_${DateTime.now().millisecondsSinceEpoch}',
+          'currency': 'usd',
           'orderType': orderType,
           'orderId': orderId,
         }),
@@ -32,23 +37,44 @@ class PaymentService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data;
-      } else {
-        print('Failed to create Razorpay order: ${response.body}');
-        return null;
+        if (data['success'] == true) {
+          return data;
+        }
       }
+      print('Failed to create Stripe payment: ${response.body}');
+      return null;
     } catch (e) {
-      print('Error creating Razorpay order: $e');
+      print('Error creating Stripe payment: $e');
       return null;
     }
   }
 
-  /// Verify Razorpay payment
-  static Future<bool> verifyPayment({
+  /// Present Stripe payment sheet
+  static Future<bool> presentPaymentSheet({
+    required String clientSecret,
+    String merchantDisplayName = 'Mediscribe',
+  }) async {
+    try {
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: SetupPaymentSheetParameters(
+          paymentIntentClientSecret: clientSecret,
+          merchantDisplayName: merchantDisplayName,
+          // style: ThemeMode.dark,
+        ),
+      );
+
+      await Stripe.instance.presentPaymentSheet();
+      return true;
+    } catch (e) {
+      print('Error presenting payment sheet: $e');
+      return false;
+    }
+  }
+
+  /// Verify Stripe payment after completion
+  static Future<bool> verifyStripePayment({
     required String token,
-    required String razorpayOrderId,
-    required String razorpayPaymentId,
-    required String razorpaySignature,
+    required String paymentIntentId,
     required String orderId,
     required String orderType,
   }) async {
@@ -60,9 +86,7 @@ class PaymentService {
           'Content-Type': 'application/json',
         },
         body: jsonEncode({
-          'razorpay_order_id': razorpayOrderId,
-          'razorpay_payment_id': razorpayPaymentId,
-          'razorpay_signature': razorpaySignature,
+          'paymentIntentId': paymentIntentId,
           'orderId': orderId,
           'orderType': orderType,
         }),
@@ -78,6 +102,62 @@ class PaymentService {
     } catch (e) {
       print('Error verifying payment: $e');
       return false;
+    }
+  }
+
+  /// Complete payment flow: create intent, present sheet, verify
+  static Future<Map<String, dynamic>> processStripePayment({
+    required String token,
+    required double amount,
+    required String orderType,
+    required String orderId,
+    String publishableKey = 'pk_test_your_key_here',
+  }) async {
+    try {
+      // Initialize Stripe
+      initializeStripe(publishableKey);
+
+      // Step 1: Create PaymentIntent
+      final paymentData = await createStripePayment(
+        token: token,
+        amount: amount,
+        orderType: orderType,
+        orderId: orderId,
+      );
+
+      if (paymentData == null) {
+        return {'success': false, 'message': 'Failed to create payment'};
+      }
+
+      // Step 2: Present Payment Sheet
+      final paymentSuccess = await presentPaymentSheet(
+        clientSecret: paymentData['clientSecret'],
+      );
+
+      if (!paymentSuccess) {
+        return {'success': false, 'message': 'Payment cancelled'};
+      }
+
+      // Step 3: Verify Payment
+      final verified = await verifyStripePayment(
+        token: token,
+        paymentIntentId: paymentData['paymentIntentId'],
+        orderId: orderId,
+        orderType: orderType,
+      );
+
+      if (verified) {
+        return {
+          'success': true,
+          'paymentIntentId': paymentData['paymentIntentId'],
+          'message': 'Payment successful',
+        };
+      } else {
+        return {'success': false, 'message': 'Payment verification failed'};
+      }
+    } catch (e) {
+      print('Stripe payment error: $e');
+      return {'success': false, 'message': 'Payment failed: $e'};
     }
   }
 }

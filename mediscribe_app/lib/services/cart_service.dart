@@ -21,9 +21,12 @@ class CartItem {
   }
 
   factory CartItem.fromJson(Map<String, dynamic> json) {
+    final productJson = json['product'];
+    final quantityValue = json['quantity'];
+
     return CartItem(
-      product: Product.fromJson(json['product']),
-      quantity: json['quantity'] ?? 1,
+      product: Product.fromJson(productJson is Map<String, dynamic> ? productJson : <String, dynamic>{}),
+      quantity: int.tryParse(quantityValue?.toString() ?? '') ?? 1,
     );
   }
 }
@@ -40,8 +43,15 @@ class CartService {
     }
 
     try {
-      final List<dynamic> jsonList = jsonDecode(cartData);
-      return jsonList.map((json) => CartItem.fromJson(json)).toList();
+      final decoded = jsonDecode(cartData);
+      if (decoded is! List) {
+        return [];
+      }
+
+      return decoded
+          .where((item) => item is Map<String, dynamic> && item['product'] is Map<String, dynamic>)
+          .map((item) => CartItem.fromJson(item as Map<String, dynamic>))
+          .toList();
     } catch (e) {
       print('Error loading cart: $e');
       return [];
@@ -96,12 +106,12 @@ class CartService {
 
   static Future<int> getCartCount() async {
     final items = await getCartItems();
-    return items.fold(0, (sum, item) => sum + item.quantity);
+    return items.fold<int>(0, (sum, item) => sum + item.quantity);
   }
 
   static Future<int> getCartTotal() async {
     final items = await getCartItems();
-    return items.fold(0, (sum, item) => sum + item.totalPrice);
+    return items.fold<int>(0, (sum, item) => sum + item.totalPrice);
   }
 
   static Future<bool> requiresPrescription() async {

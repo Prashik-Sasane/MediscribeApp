@@ -4,13 +4,9 @@ const { authenticate } = require("../middleware/auth");
 const {
   createPaymentOrder,
   verifyPayment,
-  paymentWebhook,
 } = require("../controllers/paymentController");
 
-// Public route for webhook (no auth needed)
-router.post("/webhook", paymentWebhook);
-
-// Authenticated routes
+// Authenticated routes (webhook is handled in app.js with raw body parsing)
 router.post("/create-order", authenticate, createPaymentOrder);
 router.post("/verify", authenticate, verifyPayment);
 

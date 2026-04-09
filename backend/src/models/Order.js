@@ -48,8 +48,8 @@ const orderSchema = new mongoose.Schema(
     },
     paymentMethod: { 
       type: String, 
-      enum: ["razorpay", "cod"], 
-      default: "razorpay" 
+      enum: ["stripe", "razorpay", "cod"], 
+      default: "stripe" 
     },
     paymentStatus: { 
       type: String, 
@@ -58,6 +58,7 @@ const orderSchema = new mongoose.Schema(
     },
     razorpayOrderId: { type: String },
     razorpayPaymentId: { type: String },
+    stripePaymentIntentId: { type: String },
     address: { type: addressSchema, default: {} },
     trackingHistory: { type: [trackingHistorySchema], default: [] },
   },

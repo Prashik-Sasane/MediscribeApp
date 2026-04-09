@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:mediscribe_app/services/notification_service.dart';
+import 'package:mediscribe_app/services/chat_socket_service.dart';
+import 'package:mediscribe_app/core/app_state.dart';
 
 class ChatScreen extends StatefulWidget {
   final String appointmentId;
@@ -27,73 +29,59 @@ class _ChatScreenState extends State<ChatScreen> {
   List<Map<String, dynamic>> messages = [];
   bool _loading = true;
   bool _sending = false;
-  int _lastMessageCount = 0;
+  String? _currentUserName;
 
   @override
   void initState() {
     super.initState();
-    _loadMessages();
-    // Auto-refresh every 3 seconds
-    _startAutoRefresh();
+    _initializeChat();
   }
 
-  void _startAutoRefresh() {
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        _checkForNewMessages();
-        _startAutoRefresh();
-      }
+  Future<void> _initializeChat() async {
+    // Get current user name from AppState
+    final appState = AppScope.of(context);
+    _currentUserName = appState.currentUser?.name ?? 'User';
+
+    // Load initial messages via API
+    await _loadMessages();
+
+    // Initialize socket and join chat room
+    if (appState.currentUser?.email != null) {
+      ChatSocketService.initialize(appState.currentUser!.email);
+    }
+
+    ChatSocketService.joinChat(widget.appointmentId);
+    ChatSocketService.onMessageReceived(_onNewMessage);
+  }
+
+  void _onNewMessage(Map<String, dynamic> message) {
+    print('[Chat] New message received via socket: ${message['text']}');
+    
+    setState(() {
+      messages.add(message);
     });
-  }
+    
+    _scrollToBottom();
 
-  Future<void> _checkForNewMessages() async {
-    try {
-      final response = await http.get(
-        Uri.parse('https://mediscribeapp.onrender.com/api/chat/${widget.appointmentId}'),
-        headers: {'Authorization': 'Bearer ${widget.token}'},
+    // Show notification if message is from other person
+    final isFromMe = widget.isDoctor
+        ? message['senderRole'] == 'doctor'
+        : message['senderRole'] == 'patient';
+
+    if (!isFromMe && mounted) {
+      NotificationService.addNotification(
+        title: widget.isDoctor
+            ? 'New Message from Patient'
+            : 'New Message from Dr. ${widget.doctorName}',
+        message: message['text'] ?? 'New message',
+        type: NotificationType.info,
       );
-      print("APPOINTMENT ID: ${widget.appointmentId}");
-      print("TOKEN: ${widget.token}");
-      if (response.statusCode == 200 && mounted) {
-        final data = jsonDecode(response.body);
-        final newMessages = List<Map<String, dynamic>>.from(data['messages'] ?? []);
-        
-        // Check if there are new messages
-        if (newMessages.length > _lastMessageCount && _lastMessageCount > 0) {
-          // New message received!
-          final latestMsg = newMessages.last;
-          final senderName = latestMsg['senderName'] ?? 'Someone';
-          
-          // Only show notification if message is from other person
-          if (!widget.isDoctor && latestMsg['senderRole'] == 'doctor') {
-            NotificationService.addNotification(
-              title: 'New Message from Dr. ${widget.doctorName}',
-              message: latestMsg['text'] ?? 'New message',
-              type: NotificationType.info,
-            );
-          } else if (widget.isDoctor) {
-            NotificationService.addNotification(
-              title: 'New Message from Patient',
-              message: latestMsg['text'] ?? 'New message',
-              type: NotificationType.info,
-            );
-          }
-        }
-        
-        setState(() {
-          messages = newMessages;
-          _lastMessageCount = newMessages.length;
-          _loading = false;
-        });
-        _scrollToBottom();
-      }
-    } catch (e) {
-      print('Error checking messages: $e');
     }
   }
 
   @override
   void dispose() {
+    ChatSocketService.leaveChat(widget.appointmentId);
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -101,6 +89,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _loadMessages() async {
     try {
+      print('[Chat] Loading messages from API...');
       final response = await http.get(
         Uri.parse('https://mediscribeapp.onrender.com/api/chat/${widget.appointmentId}'),
         headers: {'Authorization': 'Bearer ${widget.token}'},
@@ -109,18 +98,21 @@ class _ChatScreenState extends State<ChatScreen> {
       if (response.statusCode == 200 && mounted) {
         final data = jsonDecode(response.body);
         setState(() {
-           if (data != null && data['messages'] != null) {
-           messages = List<Map<String, dynamic>>.from(data['messages']);
+          if (data != null && data['messages'] != null) {
+            messages = List<Map<String, dynamic>>.from(data['messages']);
+            print('[Chat] Loaded ${messages.length} messages');
           } else {
             messages = [];
           }
-          _lastMessageCount = messages.length;
           _loading = false;
         });
         _scrollToBottom();
       }
     } catch (e) {
-      print('Error loading messages: $e');
+      print('[Chat] Error loading messages: $e');
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -128,25 +120,35 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _messageController.text.trim();
     if (text.isEmpty || _sending) return;
 
+    print('[Chat] Sending message: $text');
     setState(() => _sending = true);
 
     try {
-      final response = await http.post(
-        Uri.parse('https://mediscribeapp.onrender.com/api/chat/${widget.appointmentId}'),
-        headers: {
-          'Authorization': 'Bearer ${widget.token}',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'text': text}),
+      // Send via Socket.IO for real-time delivery
+      ChatSocketService.sendMessage(
+        appointmentId: widget.appointmentId,
+        text: text,
+        senderName: _currentUserName ?? 'User',
+        senderRole: widget.isDoctor ? 'doctor' : 'patient',
       );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        _messageController.clear();
-        await _loadMessages();
-      }
+      // Optimistic UI update
+      setState(() {
+        messages.add({
+          'id': 'temp_${DateTime.now().millisecondsSinceEpoch}',
+          'text': text,
+          'senderName': _currentUserName ?? 'User',
+          'senderRole': widget.isDoctor ? 'doctor' : 'patient',
+          'createdAt': DateTime.now().toIso8601String(),
+        });
+      });
+
+      _messageController.clear();
+      _scrollToBottom();
     } catch (e) {
+      print('[Chat] Error sending message: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+        SnackBar(content: Text('Failed to send message')),
       );
     } finally {
       if (mounted) setState(() => _sending = false);
