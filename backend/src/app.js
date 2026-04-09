@@ -9,12 +9,14 @@ const locationRoutes     = require("./routes/locationRoutes");
 const chatRoutes         = require("./routes/chatRoutes");
 const prescriptionRoutes = require("./routes/prescriptionRoutes");
 const orderRoutes        = require("./routes/orderRoutes");
+const searchRoutes       = require("./routes/searchRoutes");
+const paymentRoutes      = require("./routes/paymentRoutes");
 
 const app = express();
 
 app.use(cors({
   origin: "*",
-  methods: ["GET", "POST"]
+  methods: ["GET", "POST", "PUT", "DELETE"]
 }));
 app.use(express.json());
 
@@ -43,8 +45,15 @@ app.get("/", (_req, res) => {
       "/api/prescriptions/mine",
       "/api/orders",
       "/api/orders/mine",
+      "/api/orders/:id/tracking",
+      "/api/orders/:id/cancel",
       "/api/products",
       "/api/labs",
+      "/api/labs/book",
+      "/api/labs/my-bookings",
+      "/api/search",
+      "/api/payment/create-order",
+      "/api/payment/verify",
     ],
   });
 });
@@ -62,6 +71,8 @@ app.use("/api/prescriptions", prescriptionRoutes);
 app.use("/api/orders",        orderRoutes);
 app.use("/api/products",      productRoutes);
 app.use("/api/labs",          labRoutes);
+app.use("/api/search",        searchRoutes);
+app.use("/api/payment",       paymentRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

@@ -1,4 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../core/app_state.dart';
+import '../../models/lab_test.dart';
+import '../../services/lab_service.dart';
+import '../../services/auth_api_service.dart';
+import '../../screens/cart_screen.dart'; // Reuse MyOrdersScreen for booking history
+
+import '../../widgets/healthcare/address_picker_sheet.dart';
 
 class LabTestBookingScreen extends StatefulWidget {
   const LabTestBookingScreen({super.key});
@@ -9,14 +16,136 @@ class LabTestBookingScreen extends StatefulWidget {
 
 class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
   int selectedCategory = 0;
+  List<LabTest> _labTests = [];
+  bool _isLoading = false;
+  Map<String, dynamic>? _selectedAddress;
 
   final List<Map<String, dynamic>> categories = [
     {"name": "All Tests", "icon": Icons.grid_view_rounded},
+    {"name": "Blood", "icon": Icons.water_drop_rounded},
     {"name": "Diabetes", "icon": Icons.water_drop_rounded},
-    {"name": "Heart", "icon": Icons.favorite_rounded},
+    {"name": "Thyroid", "icon": Icons.favorite_rounded},
     {"name": "Full Body", "icon": Icons.accessibility_new_rounded},
-    {"name": "Kidney", "icon": Icons.medication_liquid_rounded},
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLabTests();
+    _fetchDefaultAddress();
+  }
+
+  Future<void> _fetchDefaultAddress() async {
+    final token = AppScope.of(context).token;
+    if (token == null) return;
+    // AuthApiService import is needed here as well
+    final addresses = await AuthApiService.getAddresses(token);
+    if (addresses.isNotEmpty) {
+      final defaultAddr = addresses.firstWhere((a) => a['isDefault'] == true, orElse: () => addresses.first);
+      setState(() => _selectedAddress = Map<String, dynamic>.from(defaultAddr));
+    }
+  }
+
+  void _onSelectAddress() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => AddressPickerSheet(
+        onSelected: (addr) {
+          setState(() => _selectedAddress = addr);
+          Navigator.pop(context);
+        },
+      ),
+    );
+  }
+
+  Future<void> _fetchLabTests({String? query, String? category}) async {
+    setState(() => _isLoading = true);
+    final tests = await LabService.fetchLabTests(
+      query: query,
+      category: category == "All Tests" ? null : category,
+    );
+    setState(() {
+      _labTests = tests;
+      _isLoading = false;
+    });
+  }
+
+  void _onCategoryChanged(int index) {
+    setState(() => selectedCategory = index);
+    _fetchLabTests(category: categories[index]['name']);
+  }
+
+  void _onSearch(String q) {
+    _fetchLabTests(query: q, category: categories[selectedCategory]['name']);
+  }
+
+  Future<void> _bookTest(LabTest test) async {
+    final state = AppScope.of(context);
+    final token = state.token;
+
+    if (token == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please login to book a test")),
+      );
+      return;
+    }
+
+    // Show Booking Confirmation Dialog
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text("Confirm Booking", style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(test.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text("Price: \$${test.price}", style: const TextStyle(color: Colors.white70)),
+            const SizedBox(height: 16),
+            const Text("This booking includes home collection and reports within 24 hours.", 
+                style: TextStyle(color: Colors.white54, fontSize: 12)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel", style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2E7DFF)),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Confirm & Pay"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Processing booking for ${test.name}...")),
+    );
+    
+    // Simulate booking success
+    await Future.delayed(const Duration(milliseconds: 1500));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("${test.name} booked successfully!"),
+          backgroundColor: Colors.green,
+        ),
+      );
+      // Navigate to My Orders/History
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const MyOrdersScreen()),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +163,13 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          _buildAppBarAction(Icons.history_rounded),
+          IconButton(
+            icon: const Icon(Icons.history_rounded, color: Colors.white, size: 22),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MyOrdersScreen()),
+            ),
+          ),
           _buildAppBarAction(Icons.shopping_cart_outlined),
           const SizedBox(width: 10),
         ],
@@ -59,6 +194,8 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                _buildAddressBar(),
+                const SizedBox(height: 20),
                 _buildModernSearchBar(),
                 const SizedBox(height: 30),
                 
@@ -67,27 +204,34 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
                 _buildCategoryChips(),
                 
                 const SizedBox(height: 30),
-                _buildSectionHeader("Exclusive Health Packages"),
+                _buildSectionHeader("Available Lab Tests"),
                 const SizedBox(height: 15),
                 
-                _buildPremiumPackageCard(
-                  title: "Executive Full Body Checkup",
-                  tests: "Includes 84 parameters",
-                  price: "89",
-                  oldPrice: "140",
-                  tag: "VALUED CHOICE",
-                  tagColor: Colors.amber,
-                  features: ["NABL Certified", "Home Collection", "Report in 24h"],
-                ),
-                _buildPremiumPackageCard(
-                  title: "Sugar & Insulin Screening",
-                  tests: "Includes 5 parameters",
-                  price: "35",
-                  oldPrice: "50",
-                  tag: "BEST SELLER",
-                  tagColor: const Color(0xFF10B981),
-                  features: ["Fast Tracking", "Doctor Consultation"],
-                ),
+                if (_isLoading)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(40.0),
+                      child: CircularProgressIndicator(color: Color(0xFF2E7DFF)),
+                    ),
+                  )
+                else if (_labTests.isEmpty)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(40.0),
+                      child: Text("No tests found", style: TextStyle(color: Colors.white54)),
+                    ),
+                  )
+                else
+                  ..._labTests.map((test) => _buildPremiumPackageCard(
+                    title: test.name,
+                    tests: test.description,
+                    price: test.price.toString(),
+                    oldPrice: (test.price * 1.5).toInt().toString(),
+                    tag: test.tags.isNotEmpty ? test.tags.first.toUpperCase() : "AVAILABLE",
+                    tagColor: test.tags.contains("popular") ? const Color(0xFF10B981) : Colors.amber,
+                    features: ["Home Collection", "Report in 24h"],
+                    onBook: () => _bookTest(test),
+                  )),
               ],
             ),
           ),
@@ -110,6 +254,44 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
     );
   }
 
+  Widget _buildAddressBar() {
+    return InkWell(
+      onTap: _onSelectAddress,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.location_on_rounded, color: Color(0xFF2E7DFF), size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _selectedAddress != null ? "Home Collection at ${_selectedAddress!['label']}" : "Select Collection Address",
+                    style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    _selectedAddress != null ? _selectedAddress!['fullAddress'] : "Tap to select address",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white24),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildModernSearchBar() {
     return Container(
       height: 55,
@@ -121,9 +303,10 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
           BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 15, offset: const Offset(0, 8))
         ],
       ),
-      child: const TextField(
-        style: TextStyle(color: Colors.white),
-        decoration: InputDecoration(
+      child: TextField(
+        onChanged: _onSearch,
+        style: const TextStyle(color: Colors.white),
+        decoration: const InputDecoration(
           hintText: "Search tests, packages or symptoms...",
           hintStyle: TextStyle(color: Colors.white38, fontSize: 14),
           prefixIcon: Icon(Icons.search_rounded, color: Color(0xFF2E7DFF)),
@@ -154,7 +337,7 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
         itemBuilder: (context, index) {
           bool isSelected = selectedCategory == index;
           return GestureDetector(
-            onTap: () => setState(() => selectedCategory = index),
+            onTap: () => _onCategoryChanged(index),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               margin: const EdgeInsets.only(right: 12),
@@ -190,6 +373,7 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
     required String tag,
     required Color tagColor,
     required List<String> features,
+    required VoidCallback onBook,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -262,7 +446,7 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
                   ],
                 ),
                 ElevatedButton(
-                  onPressed: () {},
+                  onPressed: onBook,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF2E7DFF),
                     foregroundColor: Colors.white,

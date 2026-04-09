@@ -174,4 +174,26 @@ async function updateProfile(req, res) {
   return res.json({ user: userResponse(user), message: "Profile updated" });
 }
 
-module.exports = { signup, login, doctorSignup, doctorLogin, getMe, updateProfile };
+async function addAddress(req, res) {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    user.addresses.push(req.body);
+    await user.save();
+    res.json({ addresses: user.addresses });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to add address" });
+  }
+}
+
+async function getAddresses(req, res) {
+  try {
+    const user = await User.findById(req.userId);
+    res.json({ addresses: user?.addresses || [] });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch addresses" });
+  }
+}
+
+module.exports = { signup, login, doctorSignup, doctorLogin, getMe, updateProfile, addAddress, getAddresses };

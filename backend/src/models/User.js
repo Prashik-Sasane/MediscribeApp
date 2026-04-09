@@ -12,6 +12,13 @@ const userSchema = new mongoose.Schema(
     bloodGroup: { type: String, default: "" },
     avatarUrl: { type: String, default: "" },
     upiId: { type: String, default: "" }, // For receiving payments (doctors)
+    addresses: [{
+      label: String, // Home, Office, etc.
+      fullAddress: String,
+      lat: Number,
+      lng: Number,
+      isDefault: { type: Boolean, default: false }
+    }],
   },
   { timestamps: true }
 );

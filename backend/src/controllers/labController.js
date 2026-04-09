@@ -1,83 +1,152 @@
-const labs = [
-  {
-    id: "l1",
-    name: "Complete Blood Count (CBC)",
-    category: "Blood",
-    price: 499,
-    description: "Measures RBC, WBC, platelets and hemoglobin.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1582719478170-2c3f6f0d2e62?auto=format&fit=crop&w=800&q=80",
-    tags: ["popular"],
-  },
-  {
-    id: "l2",
-    name: "HbA1c (Diabetes)",
-    category: "Diabetes",
-    price: 699,
-    description: "Average blood sugar levels over 3 months.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1581595220921-32f2c1f17f92?auto=format&fit=crop&w=800&q=80",
-    tags: ["popular"],
-  },
-  {
-    id: "l3",
-    name: "Thyroid Profile (T3/T4/TSH)",
-    category: "Thyroid",
-    price: 799,
-    description: "Screens thyroid function and hormonal balance.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1582719201952-ea63ac1671dc?auto=format&fit=crop&w=800&q=80",
-    tags: ["popular"],
-  },
-  {
-    id: "l4",
-    name: "Full Body Checkup",
-    category: "Full Body",
-    price: 1999,
-    description: "Comprehensive package including blood, liver, kidney.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1582719478183-2ab71b7f44fb?auto=format&fit=crop&w=800&q=80",
-    tags: ["popular"],
-  },
-  {
-    id: "l5",
-    name: "Vitamin D Test",
-    category: "Blood",
-    price: 999,
-    description: "Detects Vitamin D deficiency affecting bones & immunity.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1582719478291-6c2b7b29ea62?auto=format&fit=crop&w=800&q=80",
-    tags: [],
-  },
-  {
-    id: "l6",
-    name: "Lipid Profile",
-    category: "Blood",
-    price: 899,
-    description: "Measures cholesterol and triglycerides for heart risk.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1582719478177-2cf81f170d72?auto=format&fit=crop&w=800&q=80",
-    tags: ["popular"],
-  },
-];
+const LabTest = require("../models/LabTest");
+const LabBooking = require("../models/LabBooking");
 
-function listLabs(req, res) {
-  const category = (req.query.category || "").toString();
-  const q = (req.query.q || "").toString().toLowerCase();
-  const tag = (req.query.tag || "").toString().toLowerCase();
+async function listLabs(req, res) {
+  try {
+    const { category, q, tag, page = 1, limit = 20 } = req.query;
 
-  let result = labs;
-  if (category) {
-    result = result.filter((l) => l.category === category);
-  }
-  if (q) {
-    result = result.filter((l) => l.name.toLowerCase().includes(q));
-  }
-  if (tag) {
-    result = result.filter((l) => l.tags.some((t) => t.toLowerCase() === tag));
-  }
+    const query = {};
+    
+    if (category && category !== "All Tests") {
+      query.category = category;
+    }
+    
+    if (tag) {
+      query.tags = tag;
+    }
+    
+    if (q && q.trim()) {
+      query.$or = [
+        { name: { $regex: q, $options: "i" } },
+        { category: { $regex: q, $options: "i" } },
+        { description: { $regex: q, $options: "i" } }
+      ];
+    }
 
-  return res.json({ labs: result });
+    const skip = (Number(page) - 1) * Number(limit);
+    
+    const [labs, total] = await Promise.all([
+      LabTest.find(query)
+        .skip(skip)
+        .limit(Number(limit))
+        .sort({ createdAt: -1 }),
+      LabTest.countDocuments(query)
+    ]);
+
+    return res.json({
+      labs: labs.map(labPublic),
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages: Math.ceil(total / Number(limit))
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching lab tests:", error);
+    return res.status(500).json({ message: "Failed to fetch lab tests" });
+  }
 }
 
-module.exports = { listLabs };
+async function bookLabTest(req, res) {
+  try {
+    const { labTestId, address, preferredDate, timeSlot, paymentMethod = "razorpay" } = req.body;
+
+    if (!labTestId || !address || !preferredDate || !timeSlot) {
+      return res.status(400).json({ 
+        message: "labTestId, address, preferredDate, and timeSlot are required" 
+      });
+    }
+
+    // Get lab test details to fetch price
+    const labTest = await LabTest.findById(labTestId);
+    if (!labTest) {
+      return res.status(404).json({ message: "Lab test not found" });
+    }
+
+    // Create booking
+    const booking = await LabBooking.create({
+      userId: req.userId,
+      labTestId,
+      address,
+      preferredDate: new Date(preferredDate),
+      timeSlot,
+      amount: labTest.price,
+      paymentMethod,
+    });
+
+    return res.status(201).json({
+      success: true,
+      booking: bookingPublic(booking),
+    });
+  } catch (error) {
+    console.error("Error booking lab test:", error);
+    return res.status(500).json({ message: "Failed to book lab test" });
+  }
+}
+
+async function getMyBookings(req, res) {
+  try {
+    const { status, page = 1, limit = 20 } = req.query;
+    
+    const query = { userId: req.userId };
+    if (status) query.status = status;
+
+    const skip = (Number(page) - 1) * Number(limit);
+    
+    const [bookings, total] = await Promise.all([
+      LabBooking.find(query)
+        .populate("labTestId", "name category price imageUrl")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit)),
+      LabBooking.countDocuments(query)
+    ]);
+
+    return res.json({
+      bookings: bookings.map(bookingPublic),
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages: Math.ceil(total / Number(limit))
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching bookings:", error);
+    return res.status(500).json({ message: "Failed to fetch bookings" });
+  }
+}
+
+function labPublic(l) {
+  return {
+    id: l._id.toString(),
+    name: l.name,
+    category: l.category,
+    price: l.price,
+    description: l.description,
+    imageUrl: l.imageUrl,
+    tags: l.tags,
+    parametersCount: l.parametersCount,
+    isHomeCollectionAvailable: l.isHomeCollectionAvailable,
+    createdAt: l.createdAt,
+  };
+}
+
+function bookingPublic(b) {
+  return {
+    id: b._id.toString(),
+    labTestId: b.labTestId,
+    address: b.address,
+    preferredDate: b.preferredDate,
+    timeSlot: b.timeSlot,
+    status: b.status,
+    paymentMethod: b.paymentMethod,
+    paymentStatus: b.paymentStatus,
+    amount: b.amount,
+    reportUrl: b.reportUrl,
+    createdAt: b.createdAt,
+  };
+}
+
+module.exports = { listLabs, bookLabTest, getMyBookings };

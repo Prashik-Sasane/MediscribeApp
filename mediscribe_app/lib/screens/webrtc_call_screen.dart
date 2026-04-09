@@ -106,14 +106,35 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
 
   // ================= PEER =================
   void _setupPeerConnection() {
-    _peerConnection.onTrack = (event) {
+    _peerConnection.onTrack = (event) async {
+      print("TRACK RECEIVED: ${event.track.kind}");
+
       if (event.streams.isNotEmpty) {
-        setState(() {
-          _remoteStream = event.streams[0];
-          _remoteRenderer.srcObject = _remoteStream;
-          _isCallConnected = true;
-        });
-        _startTimer();
+        print("STREAM FOUND");
+        _remoteStream = event.streams[0];
+        _remoteRenderer.srcObject = _remoteStream;
+      } else {
+        print("NO STREAM → USING TRACK FALLBACK");
+        _remoteStream ??= await createLocalMediaStream("remoteStream");
+        _remoteStream!.addTrack(event.track);
+        _remoteRenderer.srcObject = _remoteStream;
+      }
+
+      setState(() {
+        _isCallConnected = true;
+      });
+
+      _startTimer();
+    };
+
+    _peerConnection.onConnectionState = (state) {
+      print("CONNECTION STATE: $state");
+      if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+        setState(() => _isCallConnected = true);
+      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
+          state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+          state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+        _endLocal();
       }
     };
 
@@ -258,52 +279,120 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          RTCVideoView(_remoteRenderer),
-
-          Positioned(
-            top: 40,
-            right: 10,
-            child: SizedBox(
-              width: 120,
-              height: 160,
-              child: RTCVideoView(_localRenderer, mirror: true),
+          // Background: Remote Video
+          Center(
+            child: RTCVideoView(
+              _remoteRenderer,
+              objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
             ),
           ),
 
+          // Top Overlay: Local Video (Picture-in-Picture)
           Positioned(
-            bottom: 40,
+            top: 60,
+            right: 20,
+            child: Container(
+              width: 110,
+              height: 150,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white24, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.5),
+                    blurRadius: 10,
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: RTCVideoView(
+                  _localRenderer,
+                  mirror: true,
+                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                ),
+              ),
+            ),
+          ),
+
+          // Bottom Controls Overlay
+          Positioned(
+            bottom: 50,
             left: 0,
             right: 0,
             child: Column(
               children: [
-                Text(_isCallConnected ? _time() : "Connecting...",
-                    style: const TextStyle(color: Colors.white)),
+                // Caller Name and Timer
+                Text(
+                  widget.targetName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _isCallConnected ? _time() : "Connecting...",
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 40),
 
+                // Controls Row
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    IconButton(
-                        icon: Icon(_isMuted ? Icons.mic_off : Icons.mic),
-                        color: Colors.white,
-                        onPressed: _toggleMute),
-
-                    IconButton(
-                        icon: Icon(_isCameraOff
-                            ? Icons.videocam_off
-                            : Icons.videocam),
-                        color: Colors.white,
-                        onPressed: _toggleCamera),
-
-                    IconButton(
-                        icon: const Icon(Icons.call_end),
-                        color: Colors.red,
-                        onPressed: _endCall),
+                    _controlButton(
+                      icon: _isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                      color: _isMuted ? Colors.white24 : Colors.white12,
+                      onPressed: _toggleMute,
+                    ),
+                    _controlButton(
+                      icon: Icons.call_end_rounded,
+                      color: Colors.red,
+                      size: 72,
+                      onPressed: _endCall,
+                    ),
+                    _controlButton(
+                      icon: _isCameraOff
+                          ? Icons.videocam_off_rounded
+                          : Icons.videocam_rounded,
+                      color: _isCameraOff ? Colors.white24 : Colors.white12,
+                      onPressed: _toggleCamera,
+                    ),
                   ],
-                )
+                ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _controlButton({
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+    double size = 60,
+  }) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+        ),
+        child: Icon(
+          icon,
+          color: Colors.white,
+          size: size * 0.5,
+        ),
       ),
     );
   }

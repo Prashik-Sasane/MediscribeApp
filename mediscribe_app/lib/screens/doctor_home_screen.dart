@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:mediscribe_app/core/app_state.dart';
 import 'package:mediscribe_app/services/appointment_service.dart';
 import 'package:mediscribe_app/features/consultant/consultant_doctors_screen.dart';
-import 'package:mediscribe_app/screens/chat_screen.dart';
+import 'package:mediscribe_app/features/chat/chat_screen.dart';
 import 'package:mediscribe_app/screens/doctor_patient_chat_list.dart';
 import 'package:mediscribe_app/screens/webrtc_call_screen.dart';
 import 'package:mediscribe_app/services/incoming_call_service.dart';

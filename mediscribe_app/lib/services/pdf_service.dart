@@ -4,40 +4,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 
 class PdfService {
-  static Future<File> generatePrescriptionPdf(String rawText) async {
+  static Future<File> generatePrescriptionPdf(Map<String, dynamic> data) async {
     final pdf = pw.Document();
-
-    // 🔹 Temporary structured data (same as ResultScreen)
-    final Map<String, dynamic> data = {
-      'doctor': 'Dr. Reynald O. Joson, M.D.',
-      'hospital': 'Manila Doctors Hospital',
-      'license': '44609',
-      'patient': 'John Doe',
-      'age': '45',
-      'gender': 'Male',
-      'date': '12-06-2014',
-      'medicines': [
-        {
-          'name': 'Paracetamol',
-          'dosage': '500 mg',
-          'frequency': 'Thrice daily',
-          'instructions': 'After food',
-        },
-        {
-          'name': 'Amoxicillin',
-          'dosage': '250 mg',
-          'frequency': 'Twice daily',
-          'instructions': 'Orally',
-        },
-        {
-          'name': 'Cough Syrup',
-          'dosage': '5 ml',
-          'frequency': 'Twice daily',
-          'instructions': 'Orally',
-        },
-      ],
-      'notes': 'Follow-up after 7 days',
-    };
 
     pdf.addPage(
       pw.Page(
@@ -59,18 +27,18 @@ class PdfService {
 
               /// 👨‍⚕️ Doctor
               _infoBlock(
-                title: data['doctor'].toString(),
+                title: (data['doctor'] ?? 'Not mentioned').toString(),
                 subtitle:
-                    '${data['hospital']}\nLicense No: ${data['license']}',
+                    '${data['hospital'] ?? 'Not mentioned'}\nLicense No: ${data['license'] ?? 'N/A'}',
               ),
 
               pw.SizedBox(height: 10),
 
               /// 👤 Patient
               _infoBlock(
-                title: data['patient'].toString(),
+                title: (data['patient'] ?? 'Not mentioned').toString(),
                 subtitle:
-                    'Age: ${data['age']} | Gender: ${data['gender']}\nDate: ${data['date']}',
+                    'Age: ${data['age'] ?? 'N/A'} | Gender: ${data['gender'] ?? 'N/A'}\nDate: ${data['date'] ?? 'N/A'}',
               ),
 
               pw.SizedBox(height: 20),
@@ -86,22 +54,24 @@ class PdfService {
 
               pw.SizedBox(height: 8),
 
-              _medicineTable(List<Map<String, dynamic>>.from(data['medicines'])),
+              _medicineTable(List<dynamic>.from(data['medicines'] ?? [])),
 
-              pw.SizedBox(height: 16),
+              if (data['notes'] != null && data['notes'] != 'Not mentioned') ...[
+                pw.SizedBox(height: 16),
 
-              /// 📝 Notes
-              pw.Container(
-                padding: const pw.EdgeInsets.all(10),
-                decoration: pw.BoxDecoration(
-                  color: PdfColors.yellow100,
-                  borderRadius: pw.BorderRadius.circular(6),
+                /// 📝 Notes
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.yellow100,
+                    borderRadius: pw.BorderRadius.circular(6),
+                  ),
+                  child: pw.Text(
+                    'Notes: ${data['notes']}',
+                    style: const pw.TextStyle(fontSize: 12),
+                  ),
                 ),
-                child: pw.Text(
-                  'Notes: ${data['notes']}',
-                  style: const pw.TextStyle(fontSize: 12),
-                ),
-              ),
+              ],
             ],
           );
         },
@@ -147,7 +117,7 @@ class PdfService {
   }
 
   /// 💊 Medicine Table
-  static pw.Widget _medicineTable(List<Map<String, dynamic>> medicines) {
+  static pw.Widget _medicineTable(List<dynamic> medicines) {
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey300),
       columnWidths: const {
@@ -159,11 +129,12 @@ class PdfService {
       children: [
         _tableHeader(),
         ...medicines.map((m) {
+          final medicine = Map<String, dynamic>.from(m as Map);
           return _tableRow(
-            m['name'].toString(),
-            m['dosage'].toString(),
-            m['frequency'].toString(),
-            m['instructions'].toString(),
+            (medicine['name'] ?? 'N/A').toString(),
+            (medicine['dosage'] ?? 'N/A').toString(),
+            (medicine['frequency'] ?? 'N/A').toString(),
+            (medicine['instructions'] ?? 'N/A').toString(),
           );
         }),
       ],

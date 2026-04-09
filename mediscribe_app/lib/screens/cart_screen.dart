@@ -1,62 +1,82 @@
+// This file should ideally be created or updated to show orders if it's currently a cart
 import 'package:flutter/material.dart';
 import 'package:mediscribe_app/core/app_state.dart';
+import 'package:mediscribe_app/services/order_service.dart';
+import 'package:mediscribe_app/widgets/healthcare/order_card.dart';
+import 'package:mediscribe_app/widgets/healthcare/order_tracking_sheet.dart';
 
-class CartScreen extends StatelessWidget {
-  const CartScreen({super.key});
+class MyOrdersScreen extends StatefulWidget {
+  const MyOrdersScreen({super.key});
+
+  @override
+  State<MyOrdersScreen> createState() => _MyOrdersScreenState();
+}
+
+class _MyOrdersScreenState extends State<MyOrdersScreen> {
+  List<Map<String, dynamic>> _orders = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchOrders();
+  }
+
+  Future<void> _fetchOrders() async {
+    final state = AppScope.of(context);
+    final token = state.token;
+    if (token == null) return;
+
+    final orders = await OrderService.fetchMyOrders(token);
+    setState(() {
+      _orders = orders;
+      _isLoading = false;
+    });
+  }
+
+  void _showTracking(Map<String, dynamic> order) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => OrderTrackingSheet(order: order),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final appState = AppScope.of(context);
-    final entries = appState.cartEntries;
-    final subtotal = appState.cartSubtotal;
-
     return Scaffold(
-      backgroundColor: const Color(0xFF0B1220),
+      backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0B1220),
-        title: const Text('Cart'),
+        title: const Text('My Orders', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: entries.isEmpty
-          ? const _EmptyCart()
-          : Column(
-              children: [
-                Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                    itemCount: entries.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final entry = entries[index];
-                      return _CartItemCard(
-                        name: entry.product.name,
-                        imageUrl: entry.product.imageUrl,
-                        price: entry.product.price,
-                        mrp: entry.product.mrp,
-                        quantity: entry.quantity,
-                        onMinus: () => appState.updateQuantity(
-                          entry.product.id,
-                          entry.quantity - 1,
-                        ),
-                        onPlus: () => appState.updateQuantity(
-                          entry.product.id,
-                          entry.quantity + 1,
-                        ),
-                        onRemove: () => appState.removeFromCart(entry.product.id),
-                      );
-                    },
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF2E7DFF)))
+          : _orders.isEmpty
+              ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.shopping_bag_outlined, color: Colors.white10, size: 100),
+                      SizedBox(height: 16),
+                      Text('No orders yet', style: TextStyle(color: Colors.white54, fontSize: 18)),
+                    ],
                   ),
-                ),
-                _CheckoutBar(
-                  subtotal: subtotal,
-                  itemCount: appState.cartCount,
-                  onCheckout: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Checkout coming soon')),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(20),
+                  itemCount: _orders.length,
+                  itemBuilder: (context, index) {
+                    final order = _orders[index];
+                    return OrderCard(
+                      order: order,
+                      onTap: () => _showTracking(order),
                     );
                   },
                 ),
-              ],
-            ),
     );
   }
 }

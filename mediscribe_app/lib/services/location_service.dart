@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:geolocator/geolocator.dart';
 
 class PlaceResult {
   final String id;
@@ -83,6 +84,64 @@ class LocationService {
     'API_BASE_URL',
     defaultValue: 'https://mediscribeapp.onrender.com/api',
   );
+
+  /// Get current user location
+  static Future<Position?> getCurrentLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        return null;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          return null;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        return null;
+      }
+
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+    } catch (e) {
+      print('Error getting location: $e');
+      return null;
+    }
+  }
+
+  /// Reverse geocode: lat/lng to address
+  static Future<String> reverseGeocode(double lat, double lng) async {
+    try {
+      final uri = Uri.parse(
+        'https://nominatim.openstreetmap.org/reverse?lat=$lat&lon=$lng&format=json',
+      );
+      final response = await http.get(
+        uri,
+        headers: {
+          'User-Agent': 'MediscribeApp/1.0 (contact@mediscribe.app)',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        return json['display_name'] ?? 'Unknown location';
+      }
+      return 'Unknown location';
+    } catch (e) {
+      print('Error reverse geocoding: $e');
+      return 'Unknown location';
+    }
+  }
+
+  /// Search nearby pharmacies
+  static Future<List<PlaceResult>> searchNearbyPharmacies(double lat, double lng) async {
+    return searchPlaces('pharmacy', type: 'pharmacy');
+  }
 
   static Future<List<PlaceResult>> searchPlaces(String query, {String type = ''}) async {
     try {

@@ -5,13 +5,23 @@ import 'package:mediscribe_app/screens/appointment.dart';
 import 'package:mediscribe_app/screens/location_screen.dart';
 import 'package:mediscribe_app/features/service/services_screen.dart';
 import 'package:mediscribe_app/features/doctors/doctor_detail_screen.dart';
+import 'package:mediscribe_app/features/pharmacy/pharmacy_screen.dart';
+import 'package:mediscribe_app/features/labtest/lab_test_booking_screen.dart';
 import 'package:mediscribe_app/services/location_service.dart';
 import 'package:mediscribe_app/services/doctor_api_service.dart';
 import 'package:mediscribe_app/services/notification_service.dart';
+import 'package:mediscribe_app/services/search_service.dart';
+import 'package:mediscribe_app/services/order_service.dart';
+import 'package:mediscribe_app/screens/cart_screen.dart';
+import 'package:mediscribe_app/widgets/healthcare/search_result_tile.dart';
+import 'package:mediscribe_app/widgets/healthcare/order_card.dart';
 import 'package:mediscribe_app/screens/rate_appointment_screen.dart';
 import 'package:mediscribe_app/services/auth_api_service.dart';
 import 'package:mediscribe_app/services/incoming_call_service.dart';
 import 'dart:async';
+import 'package:mediscribe_app/services/product_service.dart';
+import 'package:mediscribe_app/widgets/healthcare/product_card.dart';
+import 'package:mediscribe_app/models/product.dart';
 
 void main() {
   runApp(const MyApp());
@@ -47,9 +57,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Search state
   final TextEditingController _searchController = TextEditingController();
-  List<PlaceResult> _searchResults = [];
+  List<Map<String, dynamic>> _searchResults = [];
   bool _searching = false;
   Timer? _searchDebounce;
+
+  // Recent Orders
+  List<Map<String, dynamic>> _recentOrders = [];
+  bool _ordersLoading = true;
 
   // Location & Nearby doctors
   bool _locationLoading = true;
@@ -108,11 +122,27 @@ class _HomeScreenState extends State<HomeScreen> {
     _pageController = PageController(viewportFraction: 0.9);
     _startAutoScroll();
     _initLocation();
+    _loadRecentOrders();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppScope.of(context).loadAppointments();
       // Initialize incoming call listener
       IncomingCallService.initialize(context);
     });
+  }
+
+  Future<void> _loadRecentOrders() async {
+    final token = AppScope.of(context).token;
+    if (token == null) {
+      setState(() => _ordersLoading = false);
+      return;
+    }
+    final orders = await OrderService.fetchMyOrders(token);
+    if (mounted) {
+      setState(() {
+        _recentOrders = orders.take(3).toList();
+        _ordersLoading = false;
+      });
+    }
   }
 
   Future<void> _initLocation() async {
@@ -153,13 +183,43 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     _searchDebounce = Timer(const Duration(milliseconds: 500), () async {
       setState(() => _searching = true);
-      final results = await LocationService.searchPlaces(query);
+      final results = await SearchService.globalSearch(query);
       if (!mounted) return;
       setState(() {
         _searchResults = results;
         _searching = false;
       });
     });
+  }
+
+  Future<void> handleSearchResultTap(Map<String, dynamic> result) async {
+    final type = result['type'];
+    final id = result['id'];
+
+    switch (type) {
+      case 'doctor':
+        // Show loading or just fetch
+        final doctor = await DoctorApiService.getDoctorById(id);
+        if (doctor != null && mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => DoctorDetailScreen(doctor: doctor)),
+          );
+        }
+        break;
+      case 'medicine':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const UltraHealthShop()),
+        );
+        break;
+      case 'lab_test':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const LabTestBookingScreen()),
+        );
+        break;
+    }
   }
 
   @override
@@ -236,6 +296,14 @@ class _HomeScreenState extends State<HomeScreen> {
             const _ServiceSection(),
             const SizedBox(height: 32),
 
+            if (_recentOrders.isNotEmpty) ...[
+              _RecentOrdersSection(orders: _recentOrders),
+              const SizedBox(height: 32),
+            ],
+
+            const _RecommendedMedicinesSection(),
+            const SizedBox(height: 32),
+
             _NearbyDoctorsSection(
               doctors: _nearbyDoctors,
               loading: _locationLoading,
@@ -271,7 +339,7 @@ class _ModernHeader extends StatefulWidget {
   final String city;
   final int upcomingCount;
   final TextEditingController searchController;
-  final List<PlaceResult> searchResults;
+  final List<Map<String, dynamic>> searchResults;
   final bool searching;
   final Function(String) onSearchChanged;
 
@@ -399,27 +467,23 @@ class _ModernHeaderState extends State<_ModernHeader> {
             ),
             if (widget.searchResults.isNotEmpty) ...[
               Container(
-                constraints: const BoxConstraints(maxHeight: 200),
+                constraints: const BoxConstraints(maxHeight: 300),
                 margin: const EdgeInsets.only(top: 4),
                 decoration: BoxDecoration(
                   color: const Color(0xFF1E293B),
                   borderRadius: BorderRadius.circular(14),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10)],
                 ),
                 child: ListView.builder(
                   shrinkWrap: true,
                   itemCount: widget.searchResults.length,
                   itemBuilder: (context, index) {
-                    final place = widget.searchResults[index];
-                    return ListTile(
-                      leading: const Icon(Icons.location_on_outlined, color: Color(0xFF2E7DFF)),
-                      title: Text(place.displayName, style: const TextStyle(color: Colors.white, fontSize: 13)),
-                      subtitle: Text(place.address, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                    final result = widget.searchResults[index];
+                    return SearchResultTile(
+                      result: result,
                       onTap: () {
-                        widget.searchController.text = place.displayName;
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const ExploreMapScreen()),
-                        );
+                        widget.searchController.clear();
+                        (context.findAncestorStateOfType<_HomeScreenState>())?.handleSearchResultTap(result);
                       },
                     );
                   },
@@ -875,6 +939,127 @@ class _ServiceSection extends StatelessWidget {
                       style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
                     ),
                   ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RecommendedMedicinesSection extends StatefulWidget {
+  const _RecommendedMedicinesSection();
+
+  @override
+  State<_RecommendedMedicinesSection> createState() => _RecommendedMedicinesSectionState();
+}
+
+class _RecommendedMedicinesSectionState extends State<_RecommendedMedicinesSection> {
+  List<Product> _recommendations = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchRecommendations();
+  }
+
+  Future<void> _fetchRecommendations() async {
+    final products = await ProductService.fetchProducts(query: 'popular');
+    if (mounted) {
+      setState(() {
+        _recommendations = products.take(4).toList();
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading && _recommendations.isEmpty) return const SizedBox();
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 20),
+          child: Text(
+            "Recommended for You",
+            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 220,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.only(left: 20),
+            itemCount: _recommendations.length,
+            itemBuilder: (context, index) {
+              final product = _recommendations[index];
+              return Container(
+                width: 160,
+                margin: const EdgeInsets.only(right: 16),
+                child: ProductCard(
+                  product: product,
+                  onAddToCart: () {
+                    // Logic to add to cart
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RecentOrdersSection extends StatelessWidget {
+  final List<Map<String, dynamic>> orders;
+
+  const _RecentOrdersSection({required this.orders});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                "Your Recent Orders",
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              TextButton(
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MyOrdersScreen())),
+                child: const Text("View All", style: TextStyle(color: Color(0xFF2E7DFF))),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 160,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.only(left: 20),
+            itemCount: orders.length,
+            itemBuilder: (context, index) {
+              final order = orders[index];
+              return Container(
+                width: 280,
+                margin: const EdgeInsets.only(right: 16),
+                child: OrderCard(
+                  order: order,
+                  onTap: () {
+                    // Navigate to order details / tracking
+                  },
                 ),
               );
             },

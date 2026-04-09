@@ -71,6 +71,42 @@ class AuthApiService {
     defaultValue: 'https://mediscribeapp.onrender.com/api',
   );
 
+  static Future<List<dynamic>> getAddresses(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/auth/addresses'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['addresses'] ?? [];
+      }
+    } catch (e) {
+      print("Get Addresses Error: $e");
+    }
+    return [];
+  }
+
+  static Future<List<dynamic>> addAddress(String token, Map<String, dynamic> address) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/auth/addresses'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(address),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['addresses'] ?? [];
+      }
+    } catch (e) {
+      print("Add Address Error: $e");
+    }
+    return [];
+  }
+
   static Future<AuthApiResult> login({
     required String email,
     required String password,

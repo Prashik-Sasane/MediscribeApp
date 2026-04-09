@@ -3,11 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
-
-// Assuming these exist in your project
-// import '../core/color.dart'; 
-// import '../widgets/primary_button.dart';
-// import 'processing_screen.dart';
+import 'processing_screen.dart';
 
 class UploadScreen extends StatefulWidget {
   const UploadScreen({super.key});
@@ -124,7 +120,14 @@ class _UploadScreenState extends State<UploadScreen> {
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: _selectedImage != null ? () {} : null, // Replace with _processPrescription
+                      onPressed: _selectedImage != null ? () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ProcessingScreen(image: _selectedImage!),
+                          ),
+                        );
+                      } : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF2E7DFF),
                         foregroundColor: Colors.white,

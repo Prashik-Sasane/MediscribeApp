@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:mediscribe_app/core/app_state.dart';
@@ -26,55 +27,61 @@ class _ResultScreenState extends State<ResultScreen> {
   }
 
   Map<String, dynamic> _parseData(String raw) {
-    final lines = raw
-        .split('\n')
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty)
-        .toList();
+    try {
+      // Try parsing the JSON from Gemini
+      return Map<String, dynamic>.from(jsonDecode(raw));
+    } catch (e) {
+      // Fallback if not JSON
+      final lines = raw
+          .split('\n')
+          .map((line) => line.trim())
+          .where((line) => line.isNotEmpty)
+          .toList();
 
-    final doctorLine = lines.cast<String?>().firstWhere(
-          (line) => line!.toLowerCase().contains('dr.'),
-          orElse: () => null,
-        );
-    final patientLine = lines.cast<String?>().firstWhere(
-          (line) => line!.toLowerCase().contains('patient'),
-          orElse: () => null,
-        );
+      final doctorLine = lines.cast<String?>().firstWhere(
+            (line) => line!.toLowerCase().contains('dr.'),
+            orElse: () => null,
+          );
+      final patientLine = lines.cast<String?>().firstWhere(
+            (line) => line!.toLowerCase().contains('patient'),
+            orElse: () => null,
+          );
 
-    final medicines = <Map<String, String>>[];
-    for (final line in lines.take(6)) {
-      medicines.add({
-        'name': line.length > 28 ? '${line.substring(0, 28)}...' : line,
-        'dosage': 'As advised',
-        'frequency': 'Daily',
-        'instructions': 'After meal',
-      });
+      final medicines = <Map<String, String>>[];
+      for (final line in lines.take(6)) {
+        medicines.add({
+          'name': line.length > 28 ? '${line.substring(0, 28)}...' : line,
+          'dosage': 'As advised',
+          'frequency': 'Daily',
+          'instructions': 'After meal',
+        });
+      }
+
+      return {
+        'doctor': doctorLine ?? 'Doctor not clearly recognized',
+        'hospital': 'Nearby Care Network',
+        'license': 'N/A',
+        'patient': patientLine ?? 'Patient details unavailable',
+        'age': '--',
+        'gender': '--',
+        'date': DateTime.now().toString().split(' ').first,
+        'medicines': medicines.isEmpty
+            ? [
+                {
+                  'name': 'No medicine extracted',
+                  'dosage': '-',
+                  'frequency': '-',
+                  'instructions': '-',
+                }
+              ]
+            : medicines,
+        'notes': lines.length > 1 ? lines.last : raw,
+      };
     }
-
-    return {
-      'doctor': doctorLine ?? 'Doctor not clearly recognized',
-      'hospital': 'Nearby Care Network',
-      'license': 'N/A',
-      'patient': patientLine ?? 'Patient details unavailable',
-      'age': '--',
-      'gender': '--',
-      'date': DateTime.now().toString().split(' ').first,
-      'medicines': medicines.isEmpty
-          ? [
-              {
-                'name': 'No medicine extracted',
-                'dosage': '-',
-                'frequency': '-',
-                'instructions': '-',
-              }
-            ]
-          : medicines,
-      'notes': lines.length > 1 ? lines.last : raw,
-    };
   }
 
-  Future<void> _exportPdf(BuildContext context) async {
-    final File file = await PdfService.generatePrescriptionPdf(widget.text);
+  Future<void> _exportPdf(BuildContext context, Map<String, dynamic> data) async {
+    final File file = await PdfService.generatePrescriptionPdf(data);
     Share.shareXFiles([XFile(file.path)], text: 'Prescription Report');
   }
 
@@ -82,6 +89,33 @@ class _ResultScreenState extends State<ResultScreen> {
   Widget build(BuildContext context) {
     final data = _parseData(widget.text);
 
+    if (data.containsKey('error')) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Processing Error')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.red, size: 80),
+                const SizedBox(height: 20),
+                Text(
+                  data['error'],
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 30),
+                PrimaryButton(
+                  text: 'Go Back',
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Prescription Result'),
@@ -98,9 +132,9 @@ class _ResultScreenState extends State<ResultScreen> {
                     /// 👨‍⚕️ Doctor Section
                     _infoCard(
                       icon: Icons.medical_services,
-                      title: data['doctor'],
+                      title: data['doctor'] ?? 'Doctor not mentioned',
                       subtitle:
-                          '${data['hospital']}\nLic. No: ${data['license']}',
+                          '${data['hospital'] ?? 'Hospital not mentioned'}\nLic. No: ${data['license'] ?? 'N/A'}',
                     ),
 
                     const SizedBox(height: 12),
@@ -108,9 +142,9 @@ class _ResultScreenState extends State<ResultScreen> {
                     /// 👤 Patient Section
                     _infoCard(
                       icon: Icons.person,
-                      title: data['patient'],
+                      title: data['patient'] ?? 'Patient not mentioned',
                       subtitle:
-                          'Age: ${data['age']} | Gender: ${data['gender']}\nDate: ${data['date']}',
+                          'Age: ${data['age'] ?? 'N/A'} | Gender: ${data['gender'] ?? 'N/A'}\nDate: ${data['date'] ?? 'N/A'}',
                     ),
 
                     const SizedBox(height: 20),
@@ -126,9 +160,9 @@ class _ResultScreenState extends State<ResultScreen> {
 
                     const SizedBox(height: 12),
 
-                    _medicineTable(data['medicines']),
+                    _medicineTable(data['medicines'] ?? []),
 
-                    if (data['notes'] != null) ...[
+                    if (data['notes'] != null && data['notes'] != 'Not mentioned') ...[
                       const SizedBox(height: 20),
                       _notesCard(data['notes']),
                     ],
@@ -145,7 +179,7 @@ class _ResultScreenState extends State<ResultScreen> {
                 Expanded(
                   child: PrimaryButton(
                     text: 'Export PDF',
-                    onPressed: () => _exportPdf(context),
+                    onPressed: () => _exportPdf(context, data),
                   ),
                 ),
                 const SizedBox(width: 12),

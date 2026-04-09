@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mediscribe_app/features/doctors/bookappointment.dart';
 import 'package:mediscribe_app/services/doctor_api_service.dart';
 import 'package:mediscribe_app/screens/webrtc_call_screen.dart';
-import 'package:mediscribe_app/screens/chat_screen.dart';
+import 'package:mediscribe_app/features/chat/chat_screen.dart';
 import 'package:mediscribe_app/core/app_state.dart';
 import 'package:mediscribe_app/widgets/phone_verification_dialog.dart';
 import 'package:mediscribe_app/screens/payment_screen.dart';

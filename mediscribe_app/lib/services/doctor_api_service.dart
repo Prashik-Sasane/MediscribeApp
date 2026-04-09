@@ -115,4 +115,18 @@ class DoctorApiService {
       return [];
     }
   }
+
+  static Future<NearbyDoctor?> getDoctorById(String id) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/doctors/$id');
+      final response = await http.get(uri);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return NearbyDoctor.fromMap(data['doctor']);
+      }
+    } catch (e) {
+      print("Get Doctor Error: $e");
+    }
+    return null;
+  }
 }

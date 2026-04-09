@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mediscribe_app/core/app_state.dart';
-import 'package:mediscribe_app/screens/chat_screen.dart';
+import 'package:mediscribe_app/features/chat/chat_screen.dart';
 
 class DoctorPatientChatList extends StatefulWidget {
   const DoctorPatientChatList({super.key});
