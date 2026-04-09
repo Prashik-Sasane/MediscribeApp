@@ -81,7 +81,7 @@ class NearbyClinic {
 class LocationService {
   static const String _baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:5000/api',
+    defaultValue: 'https://mediscribeapp.onrender.com/api',
   );
 
   static Future<List<PlaceResult>> searchPlaces(String query, {String type = ''}) async {

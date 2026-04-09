@@ -59,7 +59,7 @@ User ID: 67f5a2b3c4d5e6f7a8b9c0d1
 npm start
 ```
 
-Wait for: `🚀 Server started on http://localhost:5000`
+Wait for: `🚀 Server started on https://mediscribeapp.onrender.com`
 
 ---
 

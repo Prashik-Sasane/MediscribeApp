@@ -83,7 +83,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       // Load pending doctors
       print('\n📡 Request: GET /api/doctors/admin/unverified');
       final pendingResponse = await http.get(
-        Uri.parse('http://localhost:5000/api/doctors/admin/unverified'),
+        Uri.parse('https://mediscribeapp.onrender.com/api/doctors/admin/unverified'),
         headers: {'Authorization': 'Bearer $_adminToken'},
       );
 
@@ -128,7 +128,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       // Load verified doctors count
       print('\n📡 Request: GET /api/doctors?page=1');
       final verifiedResponse = await http.get(
-        Uri.parse('http://localhost:5000/api/doctors?page=1'),
+        Uri.parse('https://mediscribeapp.onrender.com/api/doctors?page=1'),
         headers: {'Authorization': 'Bearer $_adminToken'},
       );
 
@@ -161,7 +161,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Future<void> _verifyDoctor(String doctorId, String doctorName) async {
     try {
       final response = await http.put(
-        Uri.parse('http://localhost:5000/api/doctors/$doctorId/verify'),
+        Uri.parse('https://mediscribeapp.onrender.com/api/doctors/$doctorId/verify'),
         headers: {
           'Authorization': 'Bearer $_adminToken',
           'Content-Type': 'application/json',
@@ -213,7 +213,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         setState(() => _loading = true);
         
         final response = await http.put(
-          Uri.parse('http://localhost:5000/api/doctors/admin/bulk-verify'),
+          Uri.parse('https://mediscribeapp.onrender.com/api/doctors/admin/bulk-verify'),
           headers: {
             'Authorization': 'Bearer $_adminToken',
             'Content-Type': 'application/json',

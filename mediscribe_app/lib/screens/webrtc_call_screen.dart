@@ -5,6 +5,7 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:permission_handler/permission_handler.dart';
 
 class WebRTCCallScreen extends StatefulWidget {
+  final String userId;
   final String targetUserId;
   final String targetName;
   final bool isIncoming;
@@ -12,6 +13,7 @@ class WebRTCCallScreen extends StatefulWidget {
 
   const WebRTCCallScreen({
     super.key,
+    required this.userId,
     required this.targetUserId,
     required this.targetName,
     this.isIncoming = false,
@@ -127,13 +129,15 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
 
   // ================= SOCKET =================
   void _setupSocket() {
-    _socket = IO.io('http://10.222.254.49:5000', {
+    _socket = IO.io('https://mediscribeapp.onrender.com/', {
       'transports': ['websocket'],
       'autoConnect': true,
     });
 
     _socket.onConnect((_) {
       print("Connected to server");
+  // replace dynamically
+       _socket.emit("register", widget.userId);
     });
 
     _socket.on('call-accepted', (data) async {

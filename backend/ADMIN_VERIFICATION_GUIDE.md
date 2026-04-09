@@ -64,7 +64,7 @@ await appState.doctorSignup(
 ### Bulk Verification API:
 
 ```http
-PUT http://localhost:5000/api/doctors/admin/bulk-verify
+PUT https://mediscribeapp.onrender.com/api/doctors/admin/bulk-verify
 Authorization: Bearer <admin_token>
 Content-Type: application/json
 
@@ -162,7 +162,7 @@ node verify-doctor.js doctor@example.com ML12345
 
 **Step 1: Login as Admin and get token**
 ```http
-POST http://localhost:5000/api/auth/login
+POST https://mediscribeapp.onrender.com/api/auth/login
 Content-Type: application/json
 
 {
@@ -173,13 +173,13 @@ Content-Type: application/json
 
 **Step 2: View unverified doctors**
 ```http
-GET http://localhost:5000/api/doctors/admin/unverified
+GET https://mediscribeapp.onrender.com/api/doctors/admin/unverified
 Authorization: Bearer YOUR_ADMIN_TOKEN
 ```
 
 **Step 3: Verify a doctor**
 ```http
-PUT http://localhost:5000/api/doctors/DOCTOR_ID/verify
+PUT https://mediscribeapp.onrender.com/api/doctors/DOCTOR_ID/verify
 Authorization: Bearer YOUR_ADMIN_TOKEN
 Content-Type: application/json
 

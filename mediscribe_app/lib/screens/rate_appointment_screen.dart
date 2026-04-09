@@ -42,7 +42,7 @@ class _RateAppointmentScreenState extends State<RateAppointmentScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('http://localhost:5000/api/appointments/${widget.appointmentId}/rate'),
+        Uri.parse('https://mediscribeapp.onrender.com/api/appointments/${widget.appointmentId}/rate'),
         headers: {
           'Authorization': 'Bearer ${widget.token}',
           'Content-Type': 'application/json',

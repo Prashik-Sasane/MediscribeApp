@@ -25,7 +25,7 @@ cd d:\Mesdiscribe\MediscribeApp\backend
 npm start
 ```
 
-Wait for: `🚀 Server started on http://localhost:5000`
+Wait for: `🚀 Server started on https://mediscribeapp.onrender.com`
 
 ---
 

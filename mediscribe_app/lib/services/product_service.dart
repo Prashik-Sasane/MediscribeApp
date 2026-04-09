@@ -7,7 +7,7 @@ import 'package:mediscribe_app/models/product.dart';
 class ProductService {
   static const String _baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:5000/api',
+    defaultValue: 'https://mediscribeapp.onrender.com/api',
   );
 
   static Future<List<Product>> fetchProducts({

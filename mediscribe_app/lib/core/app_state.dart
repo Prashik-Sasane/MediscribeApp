@@ -252,6 +252,32 @@ class AppState extends ChangeNotifier {
     upiId: u.upiId,
   );
 
+  // ─── UPDATE USER PROFILE (FIX FOR EDIT PROFILE) ─────────────────
+  void updateUserProfile({
+    String? name,
+    String? phone,
+    String? bloodGroup,
+    String? upiId,
+  }) {
+    if (_currentUser == null) return;
+    _currentUser = UserProfile(
+      name: name ?? _currentUser!.name,
+      email: _currentUser!.email,
+      coins: _currentUser!.coins,
+      city: _currentUser!.city,
+      role: _currentUser!.role,
+      phone: phone ?? _currentUser!.phone,
+      bloodGroup: bloodGroup ?? _currentUser!.bloodGroup,
+      avatarUrl: _currentUser!.avatarUrl,
+      specialty: _currentUser!.specialty,
+      fee: _currentUser!.fee,
+      bio: _currentUser!.bio,
+      isOnline: _currentUser!.isOnline,
+      upiId: upiId ?? _currentUser!.upiId,
+    );
+
+    notifyListeners(); // 🔥 VERY IMPORTANT
+  }
   // ─── APPOINTMENTS ─────────────────────────────────────────────
   Future<void> loadAppointments() async {
     if (_token == null) return;

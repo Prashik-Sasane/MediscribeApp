@@ -25,7 +25,7 @@ class IncomingCallService {
     if (currentUserId.isEmpty) return;
 
     // Setup socket connection
-    _socket = IO.io('http://10.222.254.49:5000', <String, dynamic>{
+    _socket = IO.io('https://mediscribeapp.onrender.com/', <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': true,
     });
@@ -137,10 +137,12 @@ class IncomingCallService {
   }
 
   static void _acceptCall(BuildContext context, Map<String, dynamic> data) {
+    final appState = AppScope.of(context);
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => WebRTCCallScreen(
+          userId: appState.currentUser!.email, 
           targetUserId: data['from'],
           targetName: data['callerName'] ?? 'Unknown',
           // targetImageUrl: '',

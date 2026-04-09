@@ -1,15 +1,21 @@
+// video_call_screen.dart
+
 import 'package:flutter/material.dart';
-import 'package:mediscribe_app/services/doctor_api_service.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 class VideoCallScreen extends StatefulWidget {
-  final NearbyDoctor doctor;
-  final String? phoneNumber; // Doctor's real phone number
+  final String userId;
+  final String targetUserId;
+  final bool isCaller;
+  final Map? offer;
 
   const VideoCallScreen({
     super.key,
-    required this.doctor,
-    this.phoneNumber,
+    required this.userId,
+    required this.targetUserId,
+    required this.isCaller,
+    this.offer,
   });
 
   @override
@@ -17,317 +23,205 @@ class VideoCallScreen extends StatefulWidget {
 }
 
 class _VideoCallScreenState extends State<VideoCallScreen> {
-  bool _isCalling = true;
-  int _callDuration = 0;
+  late IO.Socket socket;
+  late RTCPeerConnection _peerConnection;
+  MediaStream? _localStream;
+
+  final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
+  final RTCVideoRenderer _remoteRenderer = RTCVideoRenderer();
 
   @override
   void initState() {
     super.initState();
-    _startCallTimer();
+    _init();
   }
 
-  void _startCallTimer() {
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted && _isCalling) {
-        setState(() => _callDuration++);
-        _startCallTimer();
-      }
+  Future<void> _init() async {
+    await _localRenderer.initialize();
+    await _remoteRenderer.initialize();
+
+    _connectSocket();
+
+    if (widget.isCaller) {
+      await _startCall();
+    } else if (widget.offer != null) {
+      await _acceptCall(widget.offer!);
+    }
+  }
+
+  // 🔌 SOCKET
+  void _connectSocket() {
+    socket = IO.io(
+      'https://mediscribeapp.onrender.com',
+      {
+        'transports': ['websocket'],
+        'autoConnect': true,
+      },
+    );
+
+    socket.onConnect((_) {
+      print("✅ SOCKET CONNECTED");
+      socket.emit("register", widget.userId);
+    });
+
+    socket.on("call-accepted", (data) async {
+      await _peerConnection.setRemoteDescription(
+        RTCSessionDescription(
+          data['answer']['sdp'],
+          data['answer']['type'],
+        ),
+      );
+    });
+
+    socket.on("ice-candidate", (data) async {
+      await _peerConnection.addCandidate(
+        RTCIceCandidate(
+          data['candidate']['candidate'],
+          data['candidate']['sdpMid'],
+          data['candidate']['sdpMLineIndex'],
+        ),
+      );
+    });
+
+    socket.on("end-call", (_) {
+      _endCall();
     });
   }
 
-  String _formatDuration(int seconds) {
-    final minutes = seconds ~/ 60;
-    final secs = seconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+  // 🔥 PEER CONNECTION (TURN FIXED)
+  Future<void> _createPeerConnection() async {
+    Map<String, dynamic> config = {
+      'iceServers': [
+        {'urls': 'stun:stun.l.google.com:19302'},
+        {
+          'urls': 'turn:openrelay.metered.ca:80',
+          'username': 'openrelayproject',
+          'credential': 'openrelayproject',
+        },
+        {
+          'urls': 'turn:openrelay.metered.ca:443',
+          'username': 'openrelayproject',
+          'credential': 'openrelayproject',
+        },
+      ]
+    };
+
+    _peerConnection = await createPeerConnection(config);
+
+    _peerConnection.onTrack = (event) {
+      if (event.streams.isNotEmpty) {
+        _remoteRenderer.srcObject = event.streams[0];
+      }
+    };
+
+    _peerConnection.onIceCandidate = (candidate) {
+      if (candidate != null) {
+        socket.emit("ice-candidate", {
+          "to": widget.targetUserId,
+          "candidate": candidate.toMap(),
+        });
+      }
+    };
   }
 
-  Future<void> _makePhoneCall() async {
-    // Use doctor's real phone number
-    final phone = widget.phoneNumber;
-    
-    if (phone == null || phone.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Doctor has not added their phone number yet'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
+  // 📷 LOCAL STREAM
+  Future<void> _initLocalStream() async {
+    _localStream = await navigator.mediaDevices.getUserMedia({
+      'audio': true,
+      'video': true,
+    });
+
+    _localRenderer.srcObject = _localStream;
+
+    for (var track in _localStream!.getTracks()) {
+      _peerConnection.addTrack(track, _localStream!);
     }
-    
-    final phoneNumber = 'tel:$phone';
-    final uri = Uri.parse(phoneNumber);
-    
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not launch phone dialer for $phone'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
+  }
+
+  // 📞 CALL
+  Future<void> _startCall() async {
+    await _createPeerConnection();
+    await _initLocalStream();
+
+    var offer = await _peerConnection.createOffer();
+    await _peerConnection.setLocalDescription(offer);
+
+    socket.emit("call-user", {
+      "to": widget.targetUserId,
+      "offer": offer.toMap(),
+    });
+  }
+
+  // 📞 ACCEPT
+  Future<void> _acceptCall(Map data) async {
+    await _createPeerConnection();
+    await _initLocalStream();
+
+    await _peerConnection.setRemoteDescription(
+      RTCSessionDescription(data['sdp'], data['type']),
+    );
+
+    var answer = await _peerConnection.createAnswer();
+    await _peerConnection.setLocalDescription(answer);
+
+    socket.emit("accept-call", {
+      "to": widget.targetUserId,
+      "answer": answer.toMap(),
+    });
+  }
+
+  // ❌ END
+  void _endCall() {
+    _localStream?.dispose();
+    _peerConnection.close();
+
+    _localRenderer.srcObject = null;
+    _remoteRenderer.srcObject = null;
+
+    Navigator.pop(context);
+  }
+
+  @override
+  void dispose() {
+    _localRenderer.dispose();
+    _remoteRenderer.dispose();
+    socket.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Background gradient
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+          Positioned.fill(
+            child: RTCVideoView(_remoteRenderer),
+          ),
+          Positioned(
+            right: 20,
+            top: 50,
+            width: 120,
+            height: 160,
+            child: RTCVideoView(_localRenderer, mirror: true),
+          ),
+          Positioned(
+            bottom: 40,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: FloatingActionButton(
+                backgroundColor: Colors.red,
+                onPressed: () {
+                  socket.emit("end-call", {
+                    "to": widget.targetUserId,
+                  });
+                  _endCall();
+                },
+                child: const Icon(Icons.call_end),
               ),
             ),
-          ),
-
-          // Main content
-          SafeArea(
-            child: Column(
-              children: [
-                const SizedBox(height: 40),
-
-                // Doctor info
-                Column(
-                  children: [
-                    CircleAvatar(
-                      radius: 60,
-                      backgroundColor: const Color(0xFF2E7DFF),
-                      child: widget.doctor.imageUrl.isNotEmpty
-                          ? ClipOval(
-                              child: Image.network(
-                                widget.doctor.imageUrl,
-                                fit: BoxFit.cover,
-                                width: 120,
-                                height: 120,
-                                errorBuilder: (_, __, ___) => const Icon(
-                                  Icons.person,
-                                  size: 60,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            )
-                          : const Icon(Icons.person, size: 60, color: Colors.white),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      widget.doctor.name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      widget.doctor.specialty,
-                      style: const TextStyle(color: Colors.white54, fontSize: 16),
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: _isCalling ? Colors.green.withOpacity(0.2) : Colors.red.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _isCalling ? Icons.videocam : Icons.call_end,
-                            color: _isCalling ? Colors.green : Colors.red,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            _isCalling ? 'Connected • ${_formatDuration(_callDuration)}' : 'Call Ended',
-                            style: TextStyle(
-                              color: _isCalling ? Colors.green : Colors.red,
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    // Phone number display - Shows REAL doctor phone number
-                    if (widget.phoneNumber != null && widget.phoneNumber!.isNotEmpty)
-                      GestureDetector(
-                        onTap: _makePhoneCall,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.phone, color: Color(0xFF34D399), size: 16),
-                              const SizedBox(width: 8),
-                              Text(
-                                widget.phoneNumber!,
-                                style: const TextStyle(
-                                  color: Color(0xFF34D399),
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    else
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.warning_amber, color: Colors.orange, size: 16),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'Phone number not set',
-                              style: TextStyle(
-                                color: Colors.orange,
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-
-                const Spacer(),
-
-                // Coming soon message
-                Container(
-                  margin: const EdgeInsets.all(24),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.info_outline,
-                        color: Colors.white.withOpacity(0.5),
-                        size: 40,
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Video Call Feature',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Real video calling will be available soon.\nFor now, use the phone call or chat feature to communicate.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.6),
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 40),
-
-                // Call controls
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 60),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Phone call button
-                      GestureDetector(
-                        onTap: _makePhoneCall,
-                        child: Container(
-                          width: 60,
-                          height: 60,
-                          margin: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF34D399),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.phone,
-                            color: Colors.white,
-                            size: 30,
-                          ),
-                        ),
-                      ),
-                      // End call button
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Container(
-                          width: 70,
-                          height: 70,
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.call_end,
-                            color: Colors.white,
-                            size: 35,
-                          ),
-                        ),
-                      ),
-                      // Chat button
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Opening chat...'),
-                              backgroundColor: Color(0xFF60A5FA),
-                            ),
-                          );
-                        },
-                        child: Container(
-                          width: 60,
-                          height: 60,
-                          margin: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF60A5FA),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.chat_bubble,
-                            color: Colors.white,
-                            size: 28,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+          )
         ],
       ),
     );

@@ -21,7 +21,7 @@ async function start() {
   io.on("connection", (socket) => {
     console.log("✅ User connected:", socket.id);
 
-    // ================= REGISTER =================
+    
     socket.on("register", (userId) => {
       if (!userId) return;
 
@@ -31,7 +31,6 @@ async function start() {
       console.log(`👤 ${userId} registered`);
     });
 
-    // ================= CALL USER =================
     socket.on("call-user", ({ to, offer, callerName, callerRole }) => {
       if (!to) return;
 

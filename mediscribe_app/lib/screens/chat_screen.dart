@@ -49,10 +49,11 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _checkForNewMessages() async {
     try {
       final response = await http.get(
-        Uri.parse('http://localhost:5000/api/chat/${widget.appointmentId}'),
+        Uri.parse('https://mediscribeapp.onrender.com/api/chat/${widget.appointmentId}'),
         headers: {'Authorization': 'Bearer ${widget.token}'},
       );
-
+      print("APPOINTMENT ID: ${widget.appointmentId}");
+      print("TOKEN: ${widget.token}");
       if (response.statusCode == 200 && mounted) {
         final data = jsonDecode(response.body);
         final newMessages = List<Map<String, dynamic>>.from(data['messages'] ?? []);
@@ -101,14 +102,18 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _loadMessages() async {
     try {
       final response = await http.get(
-        Uri.parse('http://localhost:5000/api/chat/${widget.appointmentId}'),
+        Uri.parse('https://mediscribeapp.onrender.com/api/chat/${widget.appointmentId}'),
         headers: {'Authorization': 'Bearer ${widget.token}'},
       );
 
       if (response.statusCode == 200 && mounted) {
         final data = jsonDecode(response.body);
         setState(() {
-          messages = List<Map<String, dynamic>>.from(data['messages'] ?? []);
+           if (data != null && data['messages'] != null) {
+           messages = List<Map<String, dynamic>>.from(data['messages']);
+          } else {
+            messages = [];
+          }
           _lastMessageCount = messages.length;
           _loading = false;
         });
@@ -127,7 +132,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('http://localhost:5000/api/chat/${widget.appointmentId}'),
+        Uri.parse('https://mediscribeapp.onrender.com/api/chat/${widget.appointmentId}'),
         headers: {
           'Authorization': 'Bearer ${widget.token}',
           'Content-Type': 'application/json',

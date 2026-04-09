@@ -510,6 +510,7 @@ class DoctorDetailScreen extends StatelessWidget {
         context,
         MaterialPageRoute(
           builder: (context) => WebRTCCallScreen(
+            userId: AppScope.of(context).currentUser!.email,
             targetUserId: doctor.email.isNotEmpty ? doctor.email : doctor.id,
             targetName: doctor.name,
             // targetImageUrl: doctor.imageUrl,

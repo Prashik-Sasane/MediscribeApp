@@ -53,7 +53,7 @@ class _BookingScreenState extends State<BookingScreen> {
     try {
       final dateStr = '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
       final response = await http.get(
-        Uri.parse('http://localhost:5000/api/doctors/${widget.doctor.id}/available-slots?date=$dateStr'),
+        Uri.parse('https://mediscribeapp.onrender.com/api/doctors/${widget.doctor.id}/available-slots?date=$dateStr'),
       );
       
       if (response.statusCode == 200) {

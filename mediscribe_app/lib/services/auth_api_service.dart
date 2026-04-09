@@ -68,7 +68,7 @@ class AuthApiResult {
 class AuthApiService {
   static const String _baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:5000/api',
+    defaultValue: 'https://mediscribeapp.onrender.com/api',
   );
 
   static Future<AuthApiResult> login({

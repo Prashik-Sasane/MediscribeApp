@@ -59,6 +59,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     try {
       final appState = AppScope.of(context);
+      appState.updateUserProfile(
+      name: _nameController.text.trim(),
+      phone: _phoneController.text.trim(),
+      bloodGroup: _bloodGroupController.text.trim(),
+      upiId: _upiIdController.text.trim(),
+    );
       final token = appState.token;
 
       if (token == null) {
@@ -80,7 +86,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
       // Call backend API to update profile
       final response = await http.put(
-        Uri.parse('http://localhost:5000/api/auth/me'),
+        Uri.parse('https://mediscribeapp.onrender.com/api/auth/me'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',

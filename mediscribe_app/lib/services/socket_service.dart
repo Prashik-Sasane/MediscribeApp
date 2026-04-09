@@ -4,7 +4,7 @@ class SocketService {
   static late IO.Socket socket;
 
   static void init(String userId) {
-    socket = IO.io('http://10.222.254.49:5000', {
+    socket = IO.io('https://mediscribeapp.onrender.com/', {
       'transports': ['websocket'],
       'autoConnect': true,
     });

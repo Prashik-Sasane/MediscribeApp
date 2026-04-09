@@ -407,6 +407,7 @@ class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => WebRTCCallScreen(
+          userId: appState.currentUser!.email, // Pass doctor's email as userId
           targetUserId: targetUserId,
           targetName: patientName,
           // targetImageUrl: '',
