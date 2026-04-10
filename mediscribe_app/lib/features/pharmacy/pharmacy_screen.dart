@@ -85,12 +85,21 @@ class _UltraHealthShopState extends State<UltraHealthShop> {
   }
 
   Future<void> _fetchDefaultAddress() async {
-    final token = AppScope.of(context).token;
-    if (token == null) return;
-    final addresses = await AuthApiService.getAddresses(token);
-    if (addresses.isNotEmpty) {
-      final defaultAddr = addresses.firstWhere((a) => a['isDefault'] == true, orElse: () => addresses.first);
-      setState(() => _selectedAddress = Map<String, dynamic>.from(defaultAddr));
+    try {
+      final token = AppScope.of(context).token;
+      if (token == null) return;
+      
+      final addresses = await AuthApiService.getAddresses(token);
+      if (mounted && addresses.isNotEmpty) {
+        final defaultAddr = addresses.firstWhere(
+          (a) => a['isDefault'] == true, 
+          orElse: () => addresses.first,
+        );
+        setState(() => _selectedAddress = Map<String, dynamic>.from(defaultAddr));
+      }
+    } catch (e) {
+      print('Error fetching address: $e');
+      // Don't block UI if address fetch fails
     }
   }
 
