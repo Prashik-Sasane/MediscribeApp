@@ -32,7 +32,7 @@ class _AdminVerifyDoctorsScreenState extends State<AdminVerifyDoctorsScreen> {
 
     try {
       final response = await http.get(
-        Uri.parse('http://10.0.2.2:5000/api/doctors/admin/unverified'),
+        Uri.parse('https://mediscribeapp.onrender.com/api/doctors/admin/unverified'),
         headers: {'Authorization': 'Bearer $_token'},
       );
 
@@ -61,7 +61,7 @@ class _AdminVerifyDoctorsScreenState extends State<AdminVerifyDoctorsScreen> {
 
     try {
       final response = await http.put(
-        Uri.parse('http://10.0.2.2:5000/api/doctors/$doctorId/verify'),
+        Uri.parse('https://mediscribeapp.onrender.com/api/doctors/$doctorId/verify'),
         headers: {
           'Authorization': 'Bearer $_token',
           'Content-Type': 'application/json',

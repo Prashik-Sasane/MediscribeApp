@@ -3,6 +3,7 @@ import 'package:mediscribe_app/core/app_state.dart';
 import 'package:mediscribe_app/services/cart_service.dart';
 import 'package:mediscribe_app/services/order_service.dart';
 import 'package:mediscribe_app/services/payment_service.dart';
+import 'package:mediscribe_app/services/auth_api_service.dart';
 import 'package:mediscribe_app/widgets/healthcare/order_card.dart';
 import 'package:mediscribe_app/widgets/healthcare/order_tracking_sheet.dart';
 import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
@@ -94,11 +95,29 @@ class CartScreen extends StatefulWidget {
 class _CartScreenState extends State<CartScreen> {
   List<CartItem> _cartItems = [];
   bool _isLoading = true;
+  Map<String, dynamic>? _selectedAddress;
 
   @override
   void initState() {
     super.initState();
     _loadCart();
+    _loadUserAddress();
+  }
+
+  Future<void> _loadUserAddress() async {
+    final token = AppScope.of(context).token;
+    if (token == null) return;
+
+    final addresses = await AuthApiService.getAddresses(token);
+    if (addresses.isNotEmpty) {
+      final defaultAddress = addresses.firstWhere(
+        (addr) => addr['isDefault'] == true,
+        orElse: () => addresses.first,
+      );
+      setState(() {
+        _selectedAddress = Map<String, dynamic>.from(defaultAddress);
+      });
+    }
   }
 
   Future<void> _loadCart() async {
@@ -129,6 +148,20 @@ class _CartScreenState extends State<CartScreen> {
     }
   }
 
+  Future<void> _selectAddress() async {
+    // Show address selection/add dialog
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => _AddressDialog(currentAddress: _selectedAddress),
+    );
+
+    if (result != null) {
+      setState(() {
+        _selectedAddress = result;
+      });
+    }
+  }
+
   Future<void> _checkout() async {
     final state = AppScope.of(context);
     final token = state.token;
@@ -144,6 +177,18 @@ class _CartScreenState extends State<CartScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Your cart is empty')),
       );
+      return;
+    }
+
+    // Require address before checkout
+    if (_selectedAddress == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select or add a delivery address'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      await _selectAddress();
       return;
     }
 
@@ -225,18 +270,23 @@ class _CartScreenState extends State<CartScreen> {
         child: Material(
           color: Colors.transparent,
           child: Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
             decoration: BoxDecoration(
               color: const Color(0xFF1E293B),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('Processing payment...'),
-              ],
+            child: const IntrinsicWidth(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 12),
+                  Text(
+                    'Processing payment...',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -368,6 +418,8 @@ class _CartScreenState extends State<CartScreen> {
           ? _CheckoutBar(
               subtotal: _cartItems.fold(0, (sum, item) => sum + item.totalPrice),
               itemCount: _cartItems.fold(0, (sum, item) => sum + item.quantity),
+              address: _selectedAddress,
+              onAddressTap: _selectAddress,
               onCheckout: _checkout,
             )
           : null,
@@ -568,11 +620,15 @@ class _CheckoutBar extends StatelessWidget {
   const _CheckoutBar({
     required this.subtotal,
     required this.itemCount,
+    this.address,
+    required this.onAddressTap,
     required this.onCheckout,
   });
 
   final int subtotal;
   final int itemCount;
+  final Map<String, dynamic>? address;
+  final VoidCallback onAddressTap;
   final VoidCallback onCheckout;
 
   @override
@@ -580,54 +636,110 @@ class _CheckoutBar extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
         decoration: BoxDecoration(
           color: const Color(0xFF0B1220),
           border: Border(
             top: BorderSide(color: Colors.white.withOpacity(0.08)),
           ),
         ),
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Subtotal • $itemCount items',
-                    style: const TextStyle(color: Colors.white60),
+            // Address section
+            if (address != null)
+              GestureDetector(
+                onTap: onAddressTap,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.location_on, color: Color(0xFF2E7DFF), size: 18),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${address?['street'] ?? ''}, ${address?['city'] ?? ''}',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Icon(Icons.edit, color: Color(0xFF2E7DFF), size: 16),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '\$$subtotal',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
+                ),
+              )
+            else
+              GestureDetector(
+                onTap: onAddressTap,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.add_location, color: Color(0xFF2E7DFF), size: 18),
+                      SizedBox(width: 6),
+                      Text(
+                        'Add delivery address',
+                        style: TextStyle(
+                          color: Color(0xFF2E7DFF),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 4),
+            // Checkout button
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Subtotal • $itemCount items',
+                        style: const TextStyle(color: Colors.white60, fontSize: 12),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '\$$subtotal',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: SizedBox(
+                    height: 44,
+                    child: ElevatedButton(
+                      onPressed: onCheckout,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2E7DFF),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                      ),
+                      child: const Text(
+                        'Checkout',
+                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                      ),
                     ),
                   ),
-                ],
-              ),
-            ),
-            SizedBox(
-              height: 48,
-              child: ElevatedButton(
-                onPressed: onCheckout,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2E7DFF),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  elevation: 0,
                 ),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    'Checkout',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ),
-              ),
+              ],
             ),
           ],
         ),
@@ -636,3 +748,136 @@ class _CheckoutBar extends StatelessWidget {
   }
 }
 
+class _AddressDialog extends StatefulWidget {
+  final Map<String, dynamic>? currentAddress;
+
+  const _AddressDialog({this.currentAddress});
+
+  @override
+  State<_AddressDialog> createState() => _AddressDialogState();
+}
+
+class _AddressDialogState extends State<_AddressDialog> {
+  late TextEditingController _streetController;
+  late TextEditingController _cityController;
+  late TextEditingController _stateController;
+  late TextEditingController _zipController;
+
+  @override
+  void initState() {
+    super.initState();
+    _streetController = TextEditingController(text: widget.currentAddress?['street'] ?? '');
+    _cityController = TextEditingController(text: widget.currentAddress?['city'] ?? '');
+    _stateController = TextEditingController(text: widget.currentAddress?['state'] ?? '');
+    _zipController = TextEditingController(text: widget.currentAddress?['zip'] ?? '');
+  }
+
+  @override
+  void dispose() {
+    _streetController.dispose();
+    _cityController.dispose();
+    _stateController.dispose();
+    _zipController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF1E293B),
+      title: const Text(
+        'Delivery Address',
+        style: TextStyle(color: Colors.white),
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _streetController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'Street Address',
+                labelStyle: TextStyle(color: Colors.white54),
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white24),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _cityController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'City',
+                labelStyle: TextStyle(color: Colors.white54),
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white24),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _stateController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: 'State',
+                      labelStyle: TextStyle(color: Colors.white54),
+                      enabledBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: Colors.white24),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _zipController,
+                    style: const TextStyle(color: Colors.white),
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'ZIP Code',
+                      labelStyle: TextStyle(color: Colors.white54),
+                      enabledBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: Colors.white24),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF2E7DFF),
+          ),
+          onPressed: () {
+            if (_streetController.text.isEmpty || _cityController.text.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Please fill in street and city')),
+              );
+              return;
+            }
+            Navigator.pop(context, {
+              'street': _streetController.text,
+              'city': _cityController.text,
+              'state': _stateController.text,
+              'zip': _zipController.text,
+            });
+          },
+          child: const Text('Save Address'),
+        ),
+      ],
+    );
+  }
+}

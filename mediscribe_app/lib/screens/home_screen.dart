@@ -147,23 +147,53 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _initLocation() async {
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) return;
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) return;
+      setState(() {
+        _locationLoading = true;
+        _currentLocation = 'Detecting location...';
+      });
+
+      // Get current GPS position
+      Position? position = await LocationService.getCurrentLocation();
+      if (position == null) {
+        setState(() {
+          _currentLocation = 'Location unavailable';
+          _locationLoading = false;
+        });
+        return;
       }
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+
+      // Reverse geocode to get city name
+      final address = await LocationService.reverseGeocode(
+        position.latitude,
+        position.longitude,
       );
-      final city = AppScope.of(context).currentUser?.city ?? 'My Location';
+
+      // Extract city from address
+      String city = 'My Location';
+      final addressParts = address.split(',');
+      if (addressParts.length >= 3) {
+        city = addressParts[addressParts.length - 4]?.trim() ?? 
+               addressParts[addressParts.length - 3]?.trim() ?? 
+               'My Location';
+      }
+
       if (!mounted) return;
       setState(() {
         _currentLocation = city;
+        _locationLoading = false;
       });
+
+      // Load nearby doctors based on actual GPS location
       _loadNearbyDoctors(position.latitude, position.longitude);
-    } catch (_) {}
+    } catch (e) {
+      print('Location error: $e');
+      if (mounted) {
+        setState(() {
+          _currentLocation = 'Location error';
+          _locationLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _loadNearbyDoctors(double lat, double lng) async {

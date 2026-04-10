@@ -5,7 +5,7 @@ import 'package:flutter_stripe/flutter_stripe.dart';
 class PaymentService {
   static const String _baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://mediscribeapp.onrender.com/api',
+    defaultValue: 'https://mediscribeapp.onrender.com/api',  // Android emulator - change to your IP if using physical device
   );
 
   /// Initialize Stripe with publishable key
@@ -21,6 +21,9 @@ class PaymentService {
     required String orderId,
   }) async {
     try {
+      print('Creating payment: amount=$amount, orderType=$orderType, orderId=$orderId');
+      print('URL: $_baseUrl/payment/create-order');
+      
       final response = await http.post(
         Uri.parse('$_baseUrl/payment/create-order'),
         headers: {
@@ -34,6 +37,9 @@ class PaymentService {
           'orderId': orderId,
         }),
       );
+
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);

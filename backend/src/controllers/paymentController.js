@@ -2,12 +2,26 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const Order = require("../models/Order");
 const LabBooking = require("../models/LabBooking");
 
+// Validate Stripe key is configured
+if (!process.env.STRIPE_SECRET_KEY) {
+  console.error("⚠️ WARNING: STRIPE_SECRET_KEY is not set in environment variables!");
+  console.error("Please add it to your .env file or Render environment variables");
+}
+
 /**
  * POST /api/payment/create-order
  * Create a Stripe PaymentIntent for payment
  */
 async function createPaymentOrder(req, res) {
   try {
+    // Check if Stripe is configured
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return res.status(500).json({ 
+        success: false, 
+        message: "Stripe is not configured. Please contact support." 
+      });
+    }
+
     const { amount, currency = 'usd', orderType, orderId } = req.body;
 
     if (!amount || !orderType || !orderId) {
@@ -33,10 +47,11 @@ async function createPaymentOrder(req, res) {
       paymentIntentId: paymentIntent.id,
     });
   } catch (error) {
-    console.error("Error creating Stripe PaymentIntent:", error);
+    console.error("Error creating Stripe PaymentIntent:", error.message);
+    console.error("Full error:", error);
     return res.status(500).json({ 
       success: false, 
-      message: "Failed to create payment order" 
+      message: `Failed to create payment order: ${error.message}` 
     });
   }
 }
