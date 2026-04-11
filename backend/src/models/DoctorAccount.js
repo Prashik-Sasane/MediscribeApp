@@ -25,8 +25,8 @@ const doctorAccountSchema = new mongoose.Schema(
     phone: { type: String, default: "" },
     upiId: { type: String, default: "" }, // UPI ID for receiving payments
     isOnline: { type: Boolean, default: false },
-    lat: { type: Number, default: 0 },
     lng: { type: Number, default: 0 },
+    lat: { type: Number, default: 0 },
     location: {
       type: { type: String, enum: ["Point"], default: "Point" },
       coordinates: { type: [Number], default: [0, 0] }, // [lng, lat]

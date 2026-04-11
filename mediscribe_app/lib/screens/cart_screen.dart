@@ -28,13 +28,42 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
   Future<void> _fetchOrders() async {
     final state = AppScope.of(context);
     final token = state.token;
-    if (token == null) return;
 
-    final orders = await OrderService.fetchMyOrders(token);
-    setState(() {
-      _orders = orders;
-      _isLoading = false;
-    });
+    if (token == null) {
+      print('MyOrders: No token available');
+      setState(() {
+        _isLoading = false;
+      });
+      return;
+    }
+
+    try {
+      print('MyOrders: Fetching orders...');
+      final orders = await OrderService.fetchMyOrders(token);
+      print('MyOrders: Fetched ${orders.length} orders');
+      print('MyOrders: Orders data: $orders');
+
+      if (mounted) {
+        setState(() {
+          _orders = orders;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('MyOrders: Error fetching orders: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh orders when screen becomes visible
+    _fetchOrders();
   }
 
   void _showTracking(Map<String, dynamic> order) {
@@ -51,21 +80,26 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
-        title: const Text('My Orders', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text('My Orders',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF2E7DFF)))
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFF2E7DFF)))
           : _orders.isEmpty
               ? const Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.shopping_bag_outlined, color: Colors.white10, size: 100),
+                      Icon(Icons.shopping_bag_outlined,
+                          color: Colors.white10, size: 100),
                       SizedBox(height: 16),
-                      Text('No orders yet', style: TextStyle(color: Colors.white54, fontSize: 18)),
+                      Text('No orders yet',
+                          style:
+                              TextStyle(color: Colors.white54, fontSize: 18)),
                     ],
                   ),
                 )
@@ -137,7 +171,7 @@ class _CartScreenState extends State<CartScreen> {
   Future<void> _removeItem(String productId) async {
     await CartService.removeFromCart(productId);
     await _loadCart();
-    
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -200,53 +234,75 @@ class _CartScreenState extends State<CartScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         backgroundColor: const Color(0xFF1E293B),
-        title: const Text('Confirm Order', style: TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Total: \$${total.toStringAsFixed(2)}',
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Payment Method:',
-              style: TextStyle(color: Colors.white54),
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2E7DFF).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFF2E7DFF)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.credit_card, color: Color(0xFF2E7DFF)),
-                  SizedBox(width: 8),
-                  Text(
-                    'Stripe (Card Payment)',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+
+        title: const Text(
+          'Confirm Order',
+          style: TextStyle(color: Colors.white),
         ),
+
+        // ✅ FIXED CONTENT
+        content: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Total: \$${total.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              const Text(
+                'Payment Method:',
+                style: TextStyle(color: Colors.white54),
+              ),
+
+              const SizedBox(height: 8),
+
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2E7DFF).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF2E7DFF)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.credit_card, color: Color(0xFF2E7DFF)),
+                    SizedBox(width: 8),
+                    Text(
+                      'Stripe (Card Payment)',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // ✅ ACTIONS (correct)
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white54),
+            ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -261,8 +317,9 @@ class _CartScreenState extends State<CartScreen> {
 
     if (confirm != true) return;
 
-    // Show loading
+// ✅ LOADING DIALOG (this part is already correct)
     if (!mounted) return;
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -292,7 +349,6 @@ class _CartScreenState extends State<CartScreen> {
         ),
       ),
     );
-
     try {
       // Create order
       final items = _cartItems
@@ -304,14 +360,18 @@ class _CartScreenState extends State<CartScreen> {
               ))
           .toList();
 
+      print('Cart: Creating order with ${items.length} items, total: $total');
       final orderId = await OrderService.createOrder(
         token: token,
         items: items,
         total: total.toInt(),
       );
+      print('Cart: Order created with ID: $orderId');
 
       if (orderId == null) {
-        Navigator.pop(context);
+        if (mounted && Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Failed to create order')),
@@ -326,10 +386,14 @@ class _CartScreenState extends State<CartScreen> {
         amount: total.toDouble(),
         orderType: 'pharmacy',
         orderId: orderId,
-        publishableKey: 'pk_test_51TKLGCA0vwEId8d1ChT5p251LabT0MZ61Hlq4Jq233SOHNEa6yM80fDFRYOqfXDaHtFn8BredvwBtH974pt3olZu00Sn9lvWwp',
+        publishableKey:
+            'pk_test_51TKLGCA0vwEId8d1ChT5p251LabT0MZ61Hlq4Jq233SOHNEa6yM80fDFRYOqfXDaHtFn8BredvwBtH974pt3olZu00Sn9lvWwp',
       );
 
-      Navigator.pop(context);
+      // Close loading dialog
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
 
       if (result['success'] == true) {
         // Clear cart
@@ -342,7 +406,7 @@ class _CartScreenState extends State<CartScreen> {
               backgroundColor: Colors.green,
             ),
           );
-          
+
           // Navigate to My Orders
           Navigator.pushReplacement(
             context,
@@ -360,7 +424,10 @@ class _CartScreenState extends State<CartScreen> {
         }
       }
     } catch (e) {
-      Navigator.pop(context);
+      // Close loading dialog on error
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -386,7 +453,8 @@ class _CartScreenState extends State<CartScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF2E7DFF)))
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFF2E7DFF)))
           : _cartItems.isEmpty
               ? const _EmptyCart()
               : ListView.builder(
@@ -396,8 +464,9 @@ class _CartScreenState extends State<CartScreen> {
                     final item = _cartItems[index];
                     return _CartItemCard(
                       name: item.product.name,
-                      imageUrl: item.product.imageUrl != null && item.product.imageUrl!.isNotEmpty 
-                          ? item.product.imageUrl! 
+                      imageUrl: item.product.imageUrl != null &&
+                              item.product.imageUrl!.isNotEmpty
+                          ? item.product.imageUrl!
                           : '',
                       price: item.product.price,
                       mrp: (item.product.price * 1.2).toInt(),
@@ -416,7 +485,8 @@ class _CartScreenState extends State<CartScreen> {
                 ),
       bottomNavigationBar: _cartItems.isNotEmpty
           ? _CheckoutBar(
-              subtotal: _cartItems.fold(0, (sum, item) => sum + item.totalPrice),
+              subtotal:
+                  _cartItems.fold(0, (sum, item) => sum + item.totalPrice),
               itemCount: _cartItems.fold(0, (sum, item) => sum + item.quantity),
               address: _selectedAddress,
               onAddressTap: _selectAddress,
@@ -513,13 +583,15 @@ class _CartItemCard extends StatelessWidget {
                 height: 70,
                 width: 70,
                 color: Colors.white.withOpacity(0.05),
-                child: const Icon(Icons.medication_outlined, color: Colors.white54),
+                child: const Icon(Icons.medication_outlined,
+                    color: Colors.white54),
               ),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -654,7 +726,8 @@ class _CheckoutBar extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Row(
                     children: [
-                      const Icon(Icons.location_on, color: Color(0xFF2E7DFF), size: 18),
+                      const Icon(Icons.location_on,
+                          color: Color(0xFF2E7DFF), size: 18),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
@@ -667,7 +740,8 @@ class _CheckoutBar extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const Icon(Icons.edit, color: Color(0xFF2E7DFF), size: 16),
+                      const Icon(Icons.edit,
+                          color: Color(0xFF2E7DFF), size: 16),
                     ],
                   ),
                 ),
@@ -679,7 +753,8 @@ class _CheckoutBar extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: const Row(
                     children: [
-                      Icon(Icons.add_location, color: Color(0xFF2E7DFF), size: 18),
+                      Icon(Icons.add_location,
+                          color: Color(0xFF2E7DFF), size: 18),
                       SizedBox(width: 6),
                       Text(
                         'Add delivery address',
@@ -704,7 +779,8 @@ class _CheckoutBar extends StatelessWidget {
                     children: [
                       Text(
                         'Subtotal • $itemCount items',
-                        style: const TextStyle(color: Colors.white60, fontSize: 12),
+                        style: const TextStyle(
+                            color: Colors.white60, fontSize: 12),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -734,7 +810,8 @@ class _CheckoutBar extends StatelessWidget {
                       ),
                       child: const Text(
                         'Checkout',
-                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800, fontSize: 14),
                       ),
                     ),
                   ),
@@ -766,10 +843,14 @@ class _AddressDialogState extends State<_AddressDialog> {
   @override
   void initState() {
     super.initState();
-    _streetController = TextEditingController(text: widget.currentAddress?['street'] ?? '');
-    _cityController = TextEditingController(text: widget.currentAddress?['city'] ?? '');
-    _stateController = TextEditingController(text: widget.currentAddress?['state'] ?? '');
-    _zipController = TextEditingController(text: widget.currentAddress?['zip'] ?? '');
+    _streetController =
+        TextEditingController(text: widget.currentAddress?['street'] ?? '');
+    _cityController =
+        TextEditingController(text: widget.currentAddress?['city'] ?? '');
+    _stateController =
+        TextEditingController(text: widget.currentAddress?['state'] ?? '');
+    _zipController =
+        TextEditingController(text: widget.currentAddress?['zip'] ?? '');
   }
 
   @override
@@ -784,90 +865,107 @@ class _AddressDialogState extends State<_AddressDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      scrollable: true,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       backgroundColor: const Color(0xFF1E293B),
       title: const Text(
         'Delivery Address',
         style: TextStyle(color: Colors.white),
       ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _streetController,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'Street Address',
-                labelStyle: TextStyle(color: Colors.white54),
-                enabledBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: Colors.white24),
+
+      // ✅ CONTENT
+      content: Padding(
+        padding:
+            EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _streetController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Street Address',
+                  labelStyle: TextStyle(color: Colors.white54),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white24),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _cityController,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'City',
-                labelStyle: TextStyle(color: Colors.white54),
-                enabledBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: Colors.white24),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _cityController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'City',
+                  labelStyle: TextStyle(color: Colors.white54),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white24),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _stateController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      labelText: 'State',
-                      labelStyle: TextStyle(color: Colors.white54),
-                      enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: Colors.white24),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _stateController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        labelText: 'State',
+                        labelStyle: TextStyle(color: Colors.white54),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white24),
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _zipController,
-                    style: const TextStyle(color: Colors.white),
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'ZIP Code',
-                      labelStyle: TextStyle(color: Colors.white54),
-                      enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: Colors.white24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _zipController,
+                      style: const TextStyle(color: Colors.white),
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'ZIP Code',
+                        labelStyle: TextStyle(color: Colors.white54),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white24),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
+
+      // ✅ ACTIONS
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          child: const Text(
+            'Cancel',
+            style: TextStyle(color: Colors.white54),
+          ),
         ),
         ElevatedButton(
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF2E7DFF),
           ),
           onPressed: () {
-            if (_streetController.text.isEmpty || _cityController.text.isEmpty) {
+            if (_streetController.text.isEmpty ||
+                _cityController.text.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Please fill in street and city')),
+                const SnackBar(
+                  content: Text('Please fill in street and city'),
+                ),
               );
               return;
             }
+
             Navigator.pop(context, {
               'street': _streetController.text,
               'city': _cityController.text,

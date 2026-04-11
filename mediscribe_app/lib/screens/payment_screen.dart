@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:mediscribe_app/core/app_state.dart';
+import 'package:mediscribe_app/features/doctors/bookappointment.dart';
 import 'package:mediscribe_app/services/appointment_service.dart';
+import 'package:mediscribe_app/services/payment_service.dart';
+import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
+// import 'package:mediscribe_app/screens/cart_screen.dart'; // For MyOrdersScreen
 
 class PaymentScreen extends StatefulWidget {
   final String doctorId;
@@ -29,67 +33,115 @@ class PaymentScreen extends StatefulWidget {
 }
 
 class _PaymentScreenState extends State<PaymentScreen> {
-  String _selectedPaymentMethod = 'upi';
   bool _processing = false;
 
   Future<void> _processPayment() async {
     setState(() => _processing = true);
 
-    // Simulate payment processing
-    await Future.delayed(const Duration(seconds: 2));
+    final state = AppScope.of(context);
+    final token = state.token;
 
-    if (!mounted) return;
-
-    // Show payment success dialog
-    final success = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => _PaymentSuccessDialog(
-        amount: widget.fee,
-        doctorName: widget.doctorName,
-      ),
-    );
-
-    if (success == true && mounted) {
-      // Book the appointment after successful payment
-      final appState = AppScope.of(context);
-      final token = appState.token;
-
-      if (token != null) {
-        final result = await AppointmentService.book(
-          token: token,
-          doctorId: widget.doctorId,
-          dateLabel: widget.dateLabel,
-          timeLabel: widget.timeLabel,
-          type: widget.type,
-          location: widget.location,
-        );
-
-        if (result != null) {
-          await appState.loadAppointments();
-          if (mounted) {
-            Navigator.pop(context, true); // Return to previous screen
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Appointment booked successfully!'),
-                backgroundColor: Colors.green,
-              ),
-            );
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Payment successful but booking failed. Please contact support.'),
-                backgroundColor: Colors.orange,
-              ),
-            );
-          }
-        }
-      }
+    if (token == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please login to proceed')),
+      );
+      setState(() => _processing = false);
+      return;
     }
 
-    setState(() => _processing = false);
+    ApiAppointment? createdAppointment;
+
+    try {
+      // Step 1: Create appointment booking first
+      createdAppointment = await AppointmentService.book(
+        token: token,
+        doctorId: widget.doctorId,
+        dateLabel: widget.dateLabel,
+        timeLabel: widget.timeLabel,
+        type: widget.type,
+        location: widget.location,
+      );
+
+      if (createdAppointment == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to create appointment')),
+          );
+        }
+        setState(() => _processing = false);
+        return;
+      }
+
+      print('Payment: Appointment created with ID: ${createdAppointment.id}');
+
+      // Step 2: Process Stripe Payment
+      final result = await PaymentService.processStripePayment(
+        token: token,
+        amount: widget.fee.toDouble(),
+        orderType: 'appointment',
+        orderId: createdAppointment.id,
+        publishableKey: 'pk_test_51TKLGCA0vwEId8d1ChT5p251LabT0MZ61Hlq4Jq233SOHNEa6yM80fDFRYOqfXDaHtFn8BredvwBtH974pt3olZu00Sn9lvWwp',
+      );
+
+      print('Payment: Result = $result');
+
+      // Step 3: Handle payment result
+      if (result['success'] == true) {
+        // Payment succeeded - reload appointments
+        await state.loadAppointments();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Payment successful! Appointment booked.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          
+          // Navigate back to BookingScreen to show updated appointments
+          Navigator.pop(context, true);
+        }
+      } else {
+        // Payment failed - check if it was cancelled
+        final message = result['message'] ?? 'Payment failed';
+        final isCancelled = message.toLowerCase().contains('cancelled') || 
+                           message.toLowerCase().contains('canceled');
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(isCancelled ? 'Payment cancelled' : message),
+              backgroundColor: isCancelled ? Colors.orange : Colors.red,
+            ),
+          );
+          
+          // Navigate back to BookingScreen (appointment will not show as it has no payment)
+          Navigator.pop(context, false);
+        }
+      }
+    } catch (e) {
+      print('Payment: Error = $e');
+      
+      // Check if error is about cancellation
+      final errorStr = e.toString().toLowerCase();
+      final isCancelled = errorStr.contains('cancelled') || errorStr.contains('canceled');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isCancelled ? 'Payment cancelled' : 'Error: $e'),
+            backgroundColor: isCancelled ? Colors.orange : Colors.red,
+          ),
+        );
+        
+        // Navigate back to BookingScreen
+        Navigator.pop(context, false);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _processing = false);
+      }
+    }
   }
 
   @override
@@ -122,47 +174,50 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   _buildSummaryCard(),
                   const SizedBox(height: 24),
 
-                  // Payment Methods
-                  const Text(
-                    'Payment Method',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                  // Payment Method Info
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: const Color(0xFF2E7DFF).withOpacity(0.3),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // UPI
-                  _buildPaymentOption(
-                    method: 'upi',
-                    icon: Icons.account_balance_wallet,
-                    title: 'UPI Payment',
-                    subtitle: 'Google Pay, PhonePe, Paytm',
-                  ),
-
-                  // Credit/Debit Card
-                  _buildPaymentOption(
-                    method: 'card',
-                    icon: Icons.credit_card,
-                    title: 'Credit/Debit Card',
-                    subtitle: 'Visa, Mastercard, RuPay',
-                  ),
-
-                  // Net Banking
-                  _buildPaymentOption(
-                    method: 'netbanking',
-                    icon: Icons.account_balance,
-                    title: 'Net Banking',
-                    subtitle: 'All major banks',
-                  ),
-
-                  // Wallet
-                  _buildPaymentOption(
-                    method: 'wallet',
-                    icon: Icons.wallet,
-                    title: 'Wallet',
-                    subtitle: 'Amazon Pay, Mobikwik',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.credit_card, color: Color(0xFF2E7DFF), size: 24),
+                            SizedBox(width: 12),
+                            Text(
+                              'Stripe Payment',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Secure payment with your credit or debit card',
+                          style: TextStyle(color: Colors.white70, fontSize: 14),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            _buildCardBrand('Visa'),
+                            const SizedBox(width: 8),
+                            _buildCardBrand('Mastercard'),
+                            const SizedBox(width: 8),
+                            _buildCardBrand('Amex'),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -235,6 +290,24 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
+  Widget _buildCardBrand(String brand) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        brand,
+        style: const TextStyle(
+          color: Colors.white70,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
   Widget _buildSummaryCard() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -300,151 +373,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildPaymentOption({
-    required String method,
-    required IconData icon,
-    required String title,
-    required String subtitle,
-  }) {
-    final isSelected = _selectedPaymentMethod == method;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() => _selectedPaymentMethod = method);
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0xFF2E7DFF).withOpacity(0.2)
-              : const Color(0xFF1E293B),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? const Color(0xFF2E7DFF) : Colors.white.withOpacity(0.1),
-            width: 2,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              color: isSelected ? const Color(0xFF2E7DFF) : Colors.white70,
-              size: 28,
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Radio<String>(
-              value: method,
-              groupValue: _selectedPaymentMethod,
-              onChanged: (value) {
-                setState(() => _selectedPaymentMethod = value!);
-              },
-              activeColor: const Color(0xFF2E7DFF),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PaymentSuccessDialog extends StatelessWidget {
-  final int amount;
-  final String doctorName;
-
-  const _PaymentSuccessDialog({
-    required this.amount,
-    required this.doctorName,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: const Color(0xFF1E293B),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.check_circle,
-                color: Colors.green,
-                size: 60,
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Payment Successful!',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '₹$amount paid to Dr. $doctorName',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.7),
-                fontSize: 14,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'Continue',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

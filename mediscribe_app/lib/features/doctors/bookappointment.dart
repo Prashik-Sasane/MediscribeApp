@@ -181,7 +181,7 @@ class _BookingScreenState extends State<BookingScreen> {
       return;
     }
 
-    // Navigate to payment screen instead of direct booking
+    // Navigate to payment screen
     final paymentResult = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -198,13 +198,34 @@ class _BookingScreenState extends State<BookingScreen> {
       ),
     );
 
-    // If payment was successful, go to appointments screen
-    if (paymentResult == true && mounted) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const AppointmentsScreen()),
-        (route) => route.isFirst,
-      );
+    // Handle payment result
+    if (mounted) {
+      if (paymentResult == true) {
+        // Payment succeeded - reload appointments and navigate to AppointmentsScreen
+        await AppScope.of(context).loadAppointments();
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Appointment booked successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const AppointmentsScreen()),
+          (route) => route.isFirst,
+        );
+      } else if (paymentResult == false) {
+        // Payment was cancelled or failed
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Payment cancelled. Appointment not booked.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        // Stay on BookingScreen so user can try again
+      }
     }
   }
 

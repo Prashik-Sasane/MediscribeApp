@@ -45,27 +45,50 @@ class LabService {
     required int amount,
   }) async {
     try {
+      final requestBody = {
+        'labTestId': labTestId,
+        'address': {
+          'label': address['label'] ?? 'Home',
+          'fullAddress': address['fullAddress'] ?? address['street'] ?? '',
+          'lat': address['lat'],
+          'lng': address['lng'],
+          'phone': address['phone'] ?? '',
+        },
+        'preferredDate': preferredDate.toIso8601String(),
+        'timeSlot': timeSlot,
+        'paymentMethod': 'stripe',
+      };
+
+      print('LabService: Creating booking with body: $requestBody');
+
       final response = await http.post(
-        Uri.parse('$_baseUrl/lab-bookings'),
+        Uri.parse('$_baseUrl/labs/book'), // Correct endpoint
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
-        body: jsonEncode({
-          'labTestId': labTestId,
-          'address': address,
-          'preferredDate': preferredDate.toIso8601String(),
-          'timeSlot': timeSlot,
-          'amount': amount,
-        }),
+        body: jsonEncode(requestBody),
       );
+
+      print('LabService: Response status: ${response.statusCode}');
+      print('LabService: Response body: ${response.body}');
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final json = jsonDecode(response.body) as Map<String, dynamic>;
-        return json['booking']?['_id'] ?? json['booking']?['id'];
+        // Try multiple possible response structures
+        final bookingId = json['booking']?['_id'] ?? 
+                         json['booking']?['id'] ?? 
+                         json['_id'] ?? 
+                         json['id'] ??
+                         json['bookingId'];
+        print('LabService: Extracted booking ID: $bookingId');
+        return bookingId;
+      } else {
+        print('LabService: Error response: ${response.body}');
       }
       return null;
-    } catch (_) {
+    } catch (e) {
+      print('LabService: Exception during booking creation: $e');
       return null;
     }
   }

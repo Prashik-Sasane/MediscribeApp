@@ -10,8 +10,8 @@ const doctorSchema = new mongoose.Schema(
     reviews: { type: Number, default: 0 },
     experience: { type: Number, default: 0 }, // in years
     isOnline: { type: Boolean, default: false },
-    lat: { type: Number, required: true },
     lng: { type: Number, required: true },
+    lat: { type: Number, required: true },
     location: {
       type: {
         type: String,

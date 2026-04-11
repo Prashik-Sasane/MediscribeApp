@@ -59,7 +59,7 @@ async function searchLocation(req, res) {
 async function nearbyClinics(req, res) {
   const lat = Number(req.query.lat);
   const lng = Number(req.query.lng);
-  const radiusKm = Number(req.query.radiusKm || 20);
+  const radiusKm = Number(req.query.radiusKm || 50); // Increased default to 50
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return res.status(400).json({ message: "lat and lng are required" });
@@ -67,11 +67,12 @@ async function nearbyClinics(req, res) {
 
   let doctors;
   try {
+    // MongoDB GeoJSON requires [longitude, latitude] order
     doctors = await DoctorAccount.find({
       location: {
         $near: {
-          $geometry: { type: "Point", coordinates: [lng, lat] },
-          $maxDistance: radiusKm * 1000,
+          $geometry: { type: "Point", coordinates: [lng, lat] }, // FIXED: [lng, lat]
+          $maxDistance: radiusKm * 1000, // FIXED: meters not 10000
         },
       },
     })

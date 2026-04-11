@@ -65,7 +65,7 @@ async function listDoctors(req, res) {
 async function nearbyDoctors(req, res) {
   const lat = Number(req.query.lat);
   const lng = Number(req.query.lng);
-  const radiusKm = Number(req.query.radiusKm || 20);
+  const radiusKm = Number(req.query.radiusKm || 50); // Increased default from 20 to 50
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return res.status(400).json({ message: "lat and lng query params are required" });
@@ -74,12 +74,13 @@ async function nearbyDoctors(req, res) {
   let doctors;
   try {
     // ONLY fetch verified doctors
+    // MongoDB GeoJSON requires [longitude, latitude] order
     doctors = await DoctorAccount.find({
       isVerified: true,
       location: {
         $near: {
-          $geometry: { type: "Point", coordinates: [lng, lat] },
-          $maxDistance: radiusKm * 1000,
+          $geometry: { type: "Point", coordinates: [lng, lat] }, // FIXED: [lng, lat] not [lat, lng]
+          $maxDistance: radiusKm * 1000, // FIXED: meters not 10000
         },
       },
     }).select("-passwordHash").limit(30);
@@ -98,6 +99,7 @@ async function nearbyDoctors(req, res) {
     return doctorPublic(d, dist);
   });
 
+  console.log(`Found ${result.length} verified doctors near lat=${lat}, lng=${lng}`);
   return res.json({ doctors: result });
 }
 

@@ -10,7 +10,10 @@ import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
 import '../../widgets/healthcare/address_picker_sheet.dart';
 
 class LabTestBookingScreen extends StatefulWidget {
-  const LabTestBookingScreen({super.key});
+  final String? labTestId;
+  final Map<String, dynamic>? initialAddress; // Add initial address parameter
+  
+  const LabTestBookingScreen({super.key, this.labTestId, this.initialAddress});
 
   @override
   State<LabTestBookingScreen> createState() => _LabTestBookingScreenState();
@@ -21,6 +24,7 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
   List<LabTest> _labTests = [];
   bool _isLoading = false;
   Map<String, dynamic>? _selectedAddress;
+  bool _hasInitializedAddress = false; // Prevent multiple initializations
 
   final List<Map<String, dynamic>> categories = [
     {"name": "All Tests", "icon": Icons.grid_view_rounded},
@@ -33,18 +37,48 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
   @override
   void initState() {
     super.initState();
+    // If a specific lab test ID is provided, we can handle it later
     _fetchLabTests();
-    _fetchDefaultAddress();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_hasInitializedAddress) {
+      _hasInitializedAddress = true;
+      // Use initial address from home screen if provided
+      if (widget.initialAddress != null) {
+        setState(() => _selectedAddress = widget.initialAddress);
+      } else {
+        _fetchDefaultAddress();
+      }
+    }
   }
 
   Future<void> _fetchDefaultAddress() async {
-    final token = AppScope.of(context).token;
-    if (token == null) return;
-    // AuthApiService import is needed here as well
-    final addresses = await AuthApiService.getAddresses(token);
-    if (addresses.isNotEmpty) {
-      final defaultAddr = addresses.firstWhere((a) => a['isDefault'] == true, orElse: () => addresses.first);
-      setState(() => _selectedAddress = Map<String, dynamic>.from(defaultAddr));
+    try {
+      print('LabTest: Fetching addresses...');
+      final token = AppScope.of(context).token;
+      if (token == null) {
+        print('LabTest: No token available');
+        return;
+      }
+      
+      final addresses = await AuthApiService.getAddresses(token);
+      print('LabTest: Addresses fetched: ${addresses.length}');
+      
+      if (mounted && addresses.isNotEmpty) {
+        final defaultAddr = addresses.firstWhere(
+          (a) => a['isDefault'] == true, 
+          orElse: () => addresses.first,
+        );
+        print('LabTest: Selected address: $defaultAddr');
+        setState(() => _selectedAddress = Map<String, dynamic>.from(defaultAddr));
+      } else if (mounted) {
+        print('LabTest: No addresses found');
+      }
+    } catch (e) {
+      print('LabTest: Error fetching address: $e');
     }
   }
 
@@ -113,7 +147,7 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
           children: [
             Text(test.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Text("Price: \$${test.price}", style: const TextStyle(color: Colors.white70)),
+            Text("Price: ₹${test.price}", style: const TextStyle(color: Colors.white70)),
             const SizedBox(height: 16),
             const Text("Payment Method:", style: TextStyle(color: Colors.white54)),
             const SizedBox(height: 8),
@@ -183,6 +217,9 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
 
     try {
       // Create booking first
+      print('LabTest: Creating booking for test: ${test.id}');
+      print('LabTest: Address: $_selectedAddress');
+      
       final bookingId = await LabService.createBooking(
         token: token,
         labTestId: test.id,
@@ -192,11 +229,15 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
         amount: test.price,
       );
 
+      print('LabTest: Booking ID returned: $bookingId');
+
       if (bookingId == null) {
-        Navigator.pop(context); // Close loading
+        if (mounted && Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Failed to create booking")),
+            const SnackBar(content: Text("Failed to create booking. Please try again.")),
           );
         }
         return;
@@ -208,10 +249,13 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
         amount: test.price.toDouble(),
         orderType: 'lab_test',
         orderId: bookingId,
-        publishableKey: 'pk_test_your_stripe_key_here', // Replace with your test key
+        publishableKey: 'pk_test_51TKLGCA0vwEId8d1ChT5p251LabT0MZ61Hlq4Jq233SOHNEa6yM80fDFRYOqfXDaHtFn8BredvwBtH974pt3olZu00Sn9lvWwp',
       );
 
-      Navigator.pop(context); // Close loading
+      // Close loading dialog
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
 
       if (result['success'] == true) {
         if (mounted) {
@@ -238,7 +282,10 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
         }
       }
     } catch (e) {
-      Navigator.pop(context); // Close loading
+      // Close loading dialog on error
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -376,11 +423,15 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _selectedAddress != null ? "Home Collection at ${_selectedAddress!['label']}" : "Select Collection Address",
+                    _selectedAddress != null 
+                        ? "Home Collection at ${_selectedAddress!['street'] ?? _selectedAddress!['label'] ?? 'Address'}" 
+                        : "Select Collection Address",
                     style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                   Text(
-                    _selectedAddress != null ? _selectedAddress!['fullAddress'] : "Tap to select address",
+                    _selectedAddress != null 
+                        ? '${_selectedAddress!['city'] ?? ''}, ${_selectedAddress!['state'] ?? ''}'
+                        : "Tap to select address",
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white, fontSize: 13),
@@ -540,11 +591,11 @@ class _LabTestBookingScreenState extends State<LabTestBookingScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text("\$$price", style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                    Text("₹$price", style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
                     const SizedBox(width: 8),
                     Padding(
                       padding: const EdgeInsets.only(bottom: 4),
-                      child: Text("\$$oldPrice", style: const TextStyle(color: Colors.white24, fontSize: 14, decoration: TextDecoration.lineThrough)),
+                      child: Text("₹$oldPrice", style: const TextStyle(color: Colors.white24, fontSize: 14, decoration: TextDecoration.lineThrough)),
                     ),
                   ],
                 ),

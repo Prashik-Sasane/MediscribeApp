@@ -18,22 +18,46 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
   @override
   void initState() {
     super.initState();
-    _fetchAddresses();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_loading) {
+      _fetchAddresses();
+    }
   }
 
   Future<void> _fetchAddresses() async {
-    final token = AppScope.of(context).token;
-    if (token == null) return;
-    
-    // Assuming AuthApiService has getAddresses
+    try {
+      // Safe to call here because didChangeDependencies() ensures context is ready
+      final token = AppScope.of(context).token;
+
+    if (token == null) {
+      setState(() {
+        _loading = false;
+      });
+      return;
+    }
+
     final addresses = await AuthApiService.getAddresses(token);
+
     if (mounted) {
       setState(() {
         _addresses = addresses;
         _loading = false;
       });
     }
+  } catch (e) {
+    print("Address fetch error: $e");
+
+    if (mounted) {
+      setState(() {
+        _loading = false; 
+      });
+    }
   }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -52,9 +76,7 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
             children: [
               const Text("Select Address", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
               TextButton.icon(
-                onPressed: () {
-                  // Navigate to Add Address Screen
-                },
+                onPressed: () => _showAddAddressDialog(),
                 icon: const Icon(Icons.add, size: 16),
                 label: const Text("Add New"),
               ),
@@ -64,9 +86,26 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
           if (_loading)
             const Center(child: CircularProgressIndicator())
           else if (_addresses.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 32),
-              child: Center(child: Text("No saved addresses", style: TextStyle(color: Colors.white38))),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Center(
+                child: Column(
+                  children: [
+                    const Icon(Icons.location_off, color: Colors.white24, size: 48),
+                    const SizedBox(height: 12),
+                    const Text("No saved addresses", style: TextStyle(color: Colors.white38)),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () => _showAddAddressDialog(),
+                      icon: const Icon(Icons.add_location),
+                      label: const Text("Add Address"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2E7DFF),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             )
           else
             Flexible(
@@ -78,8 +117,11 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
                   return ListTile(
                     onTap: () => widget.onSelected(Map<String, dynamic>.from(addr)),
                     leading: const Icon(Icons.location_on_outlined, color: Color(0xFF2E7DFF)),
-                    title: Text(addr['label'] ?? 'Address', style: const TextStyle(color: Colors.white)),
-                    subtitle: Text(addr['fullAddress'] ?? '', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    title: Text(addr['label'] ?? addr['street'] ?? 'Address', style: const TextStyle(color: Colors.white)),
+                    subtitle: Text(
+                      addr['fullAddress'] ?? '${addr['city'] ?? ''}, ${addr['state'] ?? ''}', 
+                      style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
                     trailing: addr['isDefault'] == true 
                       ? const Icon(Icons.check_circle, color: Colors.green, size: 16)
                       : null,
@@ -89,6 +131,168 @@ class _AddressPickerSheetState extends State<AddressPickerSheet> {
             ),
           const SizedBox(height: 24),
         ],
+      ),
+    );
+  }
+
+  Future<void> _showAddAddressDialog() async {
+    final streetController = TextEditingController();
+    final cityController = TextEditingController();
+    final stateController = TextEditingController();
+    final zipController = TextEditingController();
+    final labelController = TextEditingController();
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          title: const Text('Add New Address', style: TextStyle(color: Colors.white)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: labelController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Label (e.g., Home, Office)',
+                    labelStyle: TextStyle(color: Colors.white54),
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.white24),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: streetController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Street Address',
+                    labelStyle: TextStyle(color: Colors.white54),
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.white24),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: cityController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'City',
+                    labelStyle: TextStyle(color: Colors.white54),
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.white24),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: stateController,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          labelText: 'State',
+                          labelStyle: TextStyle(color: Colors.white54),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.white24),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: zipController,
+                        style: const TextStyle(color: Colors.white),
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'ZIP Code',
+                          labelStyle: TextStyle(color: Colors.white54),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.white24),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2E7DFF),
+              ),
+              onPressed: () async {
+                if (streetController.text.isEmpty || cityController.text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please fill in street and city')),
+                  );
+                  return;
+                }
+
+                try {
+                  final token = AppScope.of(context).token;
+                  if (token == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please login first')),
+                    );
+                    return;
+                  }
+
+                  final newAddress = {
+                    'label': labelController.text.isEmpty ? 'Home' : labelController.text,
+                    'street': streetController.text,
+                    'city': cityController.text,
+                    'state': stateController.text,
+                    'zip': zipController.text,
+                    'fullAddress': '${streetController.text}, ${cityController.text}, ${stateController.text} ${zipController.text}',
+                    'isDefault': _addresses.isEmpty,
+                  };
+
+                  print('AddressPicker: Saving address: $newAddress');
+                  final updatedAddresses = await AuthApiService.addAddress(token, newAddress);
+                  print('AddressPicker: Updated addresses: ${updatedAddresses.length}');
+                  
+                  if (updatedAddresses.isNotEmpty) {
+                    if (mounted) {
+                      setState(() {
+                        _addresses = updatedAddresses;
+                      });
+                      
+                      // Auto-select the new address
+                      widget.onSelected(Map<String, dynamic>.from(updatedAddresses.last));
+                    }
+                    
+                    // Close the dialog with success
+                    if (context.mounted) {
+                      Navigator.pop(context, true);
+                    }
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Failed to save address')),
+                    );
+                  }
+                } catch (e) {
+                  print('AddressPicker: Error saving address: $e');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error saving address: $e')),
+                  );
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
       ),
     );
   }

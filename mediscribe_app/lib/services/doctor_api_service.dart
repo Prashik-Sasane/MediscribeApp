@@ -99,19 +99,34 @@ class DoctorApiService {
     required double lng,
   }) async {
     try {
-      final uri = Uri.parse('$_baseUrl/doctors/nearby?lat=$lat&lng=$lng');
+      // Try nearby first with larger radius (50km)
+      final uri = Uri.parse('$_baseUrl/doctors/nearby?lat=$lat&lng=$lng&radiusKm=50');
+      print('DoctorApiService: Fetching nearby doctors from $uri');
       final response = await http.get(uri);
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        return [];
+      print('DoctorApiService: Response status: ${response.statusCode}');
+      
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final json = jsonDecode(response.body) as Map<String, dynamic>;
+        final doctors = (json['doctors'] as List<dynamic>? ?? []);
+        print('DoctorApiService: Found ${doctors.length} nearby doctors');
+        
+        if (doctors.isNotEmpty) {
+          return doctors
+              .map((item) => NearbyDoctor.fromMap(item as Map<String, dynamic>))
+              .toList();
+        }
       }
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      final doctors = (json['doctors'] as List<dynamic>? ?? []);
-      return doctors
-          .map((item) => NearbyDoctor.fromMap(item as Map<String, dynamic>))
-          .toList();
+      
+      // Fallback: Get all doctors if none nearby
+      print('DoctorApiService: No nearby doctors, fetching all doctors...');
+      final allDoctors = await getAllDoctors();
+      print('DoctorApiService: Fetched ${allDoctors.length} total doctors');
+      return allDoctors;
     } on SocketException {
+      print('DoctorApiService: Network error');
       return [];
     } on FormatException {
+      print('DoctorApiService: Format error');
       return [];
     }
   }

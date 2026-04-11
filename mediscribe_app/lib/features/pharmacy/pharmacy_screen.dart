@@ -14,7 +14,10 @@ import '../../widgets/healthcare/product_card.dart';
 import '../../widgets/healthcare/address_picker_sheet.dart';
 
 class UltraHealthShop extends StatefulWidget {
-  const UltraHealthShop({super.key});
+  final String? initialSearchQuery;
+  final Map<String, dynamic>? initialAddress; // Add initial address parameter
+  
+  const UltraHealthShop({super.key, this.initialSearchQuery, this.initialAddress});
 
   @override
   State<UltraHealthShop> createState() => _UltraHealthShopState();
@@ -53,8 +56,18 @@ class _UltraHealthShopState extends State<UltraHealthShop> {
   @override
   void initState() {
     super.initState();
-    _fetchProducts();
-    _fetchDefaultAddress();
+    // If there's an initial search query, fetch products with it
+    if (widget.initialSearchQuery != null && widget.initialSearchQuery!.isNotEmpty) {
+      _fetchProducts(query: widget.initialSearchQuery);
+    } else {
+      _fetchProducts();
+    }
+    // Use initial address from home screen if provided
+    if (widget.initialAddress != null) {
+      setState(() => _selectedAddress = widget.initialAddress);
+    } else {
+      _fetchDefaultAddress();
+    }
     _loadCartFromService();
     _pageController = PageController(initialPage: 0);
     _bannerTimer = Timer.periodic(const Duration(seconds: 4), (Timer timer) {
@@ -86,16 +99,25 @@ class _UltraHealthShopState extends State<UltraHealthShop> {
 
   Future<void> _fetchDefaultAddress() async {
     try {
+      print('Fetching addresses...');
       final token = AppScope.of(context).token;
-      if (token == null) return;
+      if (token == null) {
+        print('No token available');
+        return;
+      }
       
       final addresses = await AuthApiService.getAddresses(token);
+      print('Addresses fetched: ${addresses.length}');
+      
       if (mounted && addresses.isNotEmpty) {
         final defaultAddr = addresses.firstWhere(
           (a) => a['isDefault'] == true, 
           orElse: () => addresses.first,
         );
+        print('Selected address: $defaultAddr');
         setState(() => _selectedAddress = Map<String, dynamic>.from(defaultAddr));
+      } else if (mounted) {
+        print('No addresses found');
       }
     } catch (e) {
       print('Error fetching address: $e');
@@ -197,7 +219,7 @@ class _UltraHealthShopState extends State<UltraHealthShop> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Total: \$${totalPrice.toStringAsFixed(2)}", 
+            Text("Total: ₹${totalPrice.toStringAsFixed(2)}", 
                 style: const TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             const Text("Payment Method:", style: TextStyle(color: Colors.white54)),
@@ -294,10 +316,13 @@ class _UltraHealthShopState extends State<UltraHealthShop> {
         amount: totalPrice,
         orderType: 'pharmacy',
         orderId: orderId,
-        publishableKey: 'pk_test_your_stripe_key_here', // Replace with your test key
+        publishableKey: 'pk_test_51TKLGCA0vwEId8d1ChT5p251LabT0MZ61Hlq4Jq233SOHNEa6yM80fDFRYOqfXDaHtFn8BredvwBtH974pt3olZu00Sn9lvWwp',
       );
 
-      Navigator.pop(context); // Close loading
+      // Close loading dialog
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
 
       if (result['success'] == true) {
         setState(() {
@@ -329,7 +354,10 @@ class _UltraHealthShopState extends State<UltraHealthShop> {
         }
       }
     } catch (e) {
-      Navigator.pop(context); // Close loading
+      // Close loading dialog on error
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -450,11 +478,15 @@ class _UltraHealthShopState extends State<UltraHealthShop> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _selectedAddress != null ? "Delivering to ${_selectedAddress!['label']}" : "Deliver to...",
+                    _selectedAddress != null 
+                        ? "Delivering to ${_selectedAddress!['street'] ?? _selectedAddress!['label'] ?? 'Address'}" 
+                        : "Deliver to...",
                     style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                   Text(
-                    _selectedAddress != null ? _selectedAddress!['fullAddress'] : "Tap to select address",
+                    _selectedAddress != null 
+                        ? '${_selectedAddress!['city'] ?? ''}, ${_selectedAddress!['state'] ?? ''}'
+                        : "Tap to select address",
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white, fontSize: 13),
@@ -709,7 +741,7 @@ class _UltraHealthShopState extends State<UltraHealthShop> {
                 ],
               ),
               const Spacer(),
-              Text("\$${totalPrice.toStringAsFixed(2)}", style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
+              Text("₹${totalPrice.toStringAsFixed(2)}", style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
             ],
           ),
         ),

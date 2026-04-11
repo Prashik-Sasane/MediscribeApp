@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 class SearchResultTile extends StatelessWidget {
   final Map<String, dynamic> result;
   final VoidCallback onTap;
+  final String? searchQuery;
 
   const SearchResultTile({
     super.key,
     required this.result,
     required this.onTap,
+    this.searchQuery,
   });
 
   @override
@@ -33,9 +35,9 @@ class SearchResultTile extends StatelessWidget {
             ? Icon(icon, color: color)
             : null,
       ),
-      title: Text(
+      title: _buildHighlightedText(
         result['title'] ?? 'Unknown',
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
       ),
       subtitle: Text(
         result['subtitle'] ?? '',
@@ -63,6 +65,38 @@ class SearchResultTile extends StatelessWidget {
               style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
             ),
           ]
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHighlightedText(String text, TextStyle style) {
+    if (searchQuery == null || searchQuery!.isEmpty) {
+      return Text(text, style: style);
+    }
+
+    final lowerText = text.toLowerCase();
+    final lowerQuery = searchQuery!.toLowerCase();
+    final index = lowerText.indexOf(lowerQuery);
+
+    if (index == -1) {
+      return Text(text, style: style);
+    }
+
+    return RichText(
+      text: TextSpan(
+        style: style,
+        children: [
+          TextSpan(text: text.substring(0, index)),
+          TextSpan(
+            text: text.substring(index, index + searchQuery!.length),
+            style: style.copyWith(
+              color: const Color(0xFF2E7DFF),
+              fontWeight: FontWeight.bold,
+              backgroundColor: const Color(0xFF2E7DFF).withOpacity(0.2),
+            ),
+          ),
+          TextSpan(text: text.substring(index + searchQuery!.length)),
         ],
       ),
     );
