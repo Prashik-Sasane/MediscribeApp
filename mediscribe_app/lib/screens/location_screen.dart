@@ -357,7 +357,6 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
                 ),
             ],
           ),
-
           /// 🔍 TOP UI (Search + Filter Chips)
           _buildTopSection(),
 

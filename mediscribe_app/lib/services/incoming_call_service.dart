@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:mediscribe_app/core/app_state.dart';
 import 'package:mediscribe_app/screens/webrtc_call_screen.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 class IncomingCallService {
   static IO.Socket? _socket;
   static BuildContext? _context;
   static bool _isListening = false;
+  static AudioPlayer? _ringtonePlayer;
+  static bool _isRinging = false;
 
   static void initialize(BuildContext context) {
     _context = context;
@@ -24,8 +27,11 @@ class IncomingCallService {
 
     if (currentUserId.isEmpty) return;
 
+    // Dispose existing socket if any
+    _socket?.dispose();
+    
     // Setup socket connection
-    _socket = IO.io('https://mediscribeapp.onrender.com/', <String, dynamic>{
+    _socket = IO.io('https://mediscribeapp.onrender.com', <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': true,
     });
@@ -41,6 +47,7 @@ class IncomingCallService {
       print('[IncomingCall] Received incoming call from: ${data['callerName']}');
       
       if (_context != null) {
+        _playRingtone();
         _showIncomingCallDialog(data);
       }
     });
@@ -48,6 +55,26 @@ class IncomingCallService {
     _socket!.onDisconnect((_) {
       print('[IncomingCall] Socket disconnected');
     });
+  }
+
+  static void _playRingtone() {
+    if (_isRinging) return;
+    _isRinging = true;
+    
+    _ringtonePlayer = AudioPlayer();
+    _ringtonePlayer!.setReleaseMode(ReleaseMode.loop);
+    _ringtonePlayer!.play(AssetSource('sounds/ringtone.mp3'));
+    print('[IncomingCall] Playing ringtone...');
+  }
+
+  static void _stopRingtone() {
+    if (!_isRinging) return;
+    _isRinging = false;
+    
+    _ringtonePlayer?.stop();
+    _ringtonePlayer?.dispose();
+    _ringtonePlayer = null;
+    print('[IncomingCall] Ringtone stopped');
   }
 
   static void _showIncomingCallDialog(Map<String, dynamic> data) {
@@ -103,6 +130,7 @@ class IncomingCallService {
                 // Reject button
                 ElevatedButton.icon(
                   onPressed: () {
+                    _stopRingtone();
                     Navigator.pop(context);
                     _socket?.emit('reject-call', {
                       'to': data['from'],
@@ -118,6 +146,7 @@ class IncomingCallService {
                 // Accept button
                 ElevatedButton.icon(
                   onPressed: () {
+                    _stopRingtone();
                     Navigator.pop(context);
                     _acceptCall(context, data);
                   },

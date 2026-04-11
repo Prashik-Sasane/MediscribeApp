@@ -38,44 +38,60 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _initializeChat() async {
-    // Get current user name from AppState
-    final appState = AppScope.of(context);
-    _currentUserName = appState.currentUser?.name ?? 'User';
+    try {
+      print('[Chat] Initializing chat...');
+      
+      // Get current user name from AppState
+      final appState = AppScope.of(context);
+      _currentUserName = appState.currentUser?.name ?? 'User';
+      print('[Chat] Current user: $_currentUserName');
 
-    // Load initial messages via API
-    await _loadMessages();
+      // Initialize socket FIRST
+      if (appState.currentUser?.email != null) {
+        print('[Chat] Initializing socket for: ${appState.currentUser!.email}');
+        ChatSocketService.initialize(appState.currentUser!.email);
+        ChatSocketService.joinChat(widget.appointmentId);
+        ChatSocketService.onMessageReceived(_onNewMessage);
+      } else {
+        print('[Chat] Warning: No user email available');
+      }
 
-    // Initialize socket and join chat room
-    if (appState.currentUser?.email != null) {
-      ChatSocketService.initialize(appState.currentUser!.email);
+      // Load messages (with timeout)
+      await _loadMessages();
+      
+      print('[Chat] Initialization complete');
+    } catch (e) {
+      print('[Chat] Error during initialization: $e');
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
-
-    ChatSocketService.joinChat(widget.appointmentId);
-    ChatSocketService.onMessageReceived(_onNewMessage);
   }
 
   void _onNewMessage(Map<String, dynamic> message) {
     print('[Chat] New message received via socket: ${message['text']}');
     
-    setState(() {
-      messages.add(message);
-    });
-    
-    _scrollToBottom();
+    if (mounted) {
+      setState(() {
+        messages.add(message);
+      });
+      
+      _scrollToBottom();
 
-    // Show notification if message is from other person
-    final isFromMe = widget.isDoctor
-        ? message['senderRole'] == 'doctor'
-        : message['senderRole'] == 'patient';
+      // Show notification if message is from other person
+      final isFromMe = widget.isDoctor
+          ? message['senderRole'] == 'doctor'
+          : message['senderRole'] == 'patient';
 
-    if (!isFromMe && mounted) {
-      NotificationService.addNotification(
-        title: widget.isDoctor
-            ? 'New Message from Patient'
-            : 'New Message from Dr. ${widget.doctorName}',
-        message: message['text'] ?? 'New message',
-        type: NotificationType.info,
-      );
+      if (!isFromMe) {
+        NotificationService.addNotification(
+          title: widget.isDoctor
+              ? 'New Message from Patient'
+              : 'New Message from Dr. ${widget.doctorName}',
+          message: message['text'] ?? 'New message',
+          type: NotificationType.info,
+        );
+      }
     }
   }
 
@@ -90,28 +106,84 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _loadMessages() async {
     try {
       print('[Chat] Loading messages from API...');
-      final response = await http.get(
-        Uri.parse('https://mediscribeapp.onrender.com/api/chat/${widget.appointmentId}'),
-        headers: {'Authorization': 'Bearer ${widget.token}'},
-      );
+      print('[Chat] Appointment ID: ${widget.appointmentId}');
+      
+      final response = await http
+          .get(
+            Uri.parse('https://mediscribeapp.onrender.com/api/chat/${widget.appointmentId}'),
+            headers: {'Authorization': 'Bearer ${widget.token}'},
+          )
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              print('[Chat] API request timeout after 10 seconds');
+              throw Exception('Request timeout');
+            },
+          );
 
-      if (response.statusCode == 200 && mounted) {
+      print('[Chat] API Response status: ${response.statusCode}');
+      print('[Chat] API Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        setState(() {
-          if (data != null && data['messages'] != null) {
-            messages = List<Map<String, dynamic>>.from(data['messages']);
-            print('[Chat] Loaded ${messages.length} messages');
-          } else {
-            messages = [];
-          }
-          _loading = false;
-        });
-        _scrollToBottom();
+        if (mounted) {
+          setState(() {
+            if (data != null && data['messages'] != null) {
+              messages = List<Map<String, dynamic>>.from(data['messages']);
+              print('[Chat] Loaded ${messages.length} messages');
+            } else {
+              messages = [];
+              print('[Chat] No messages found');
+            }
+            _loading = false;
+          });
+          _scrollToBottom();
+        }
+      } else if (response.statusCode == 403) {
+        print('[Chat] Forbidden - User not authorized for this chat');
+        if (mounted) {
+          setState(() => _loading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('You do not have access to this chat')),
+          );
+        }
+      } else if (response.statusCode == 404) {
+        print('[Chat] Chat not found');
+        if (mounted) {
+          setState(() => _loading = false);
+          messages = [];
+        }
+      } else {
+        print('[Chat] Unexpected status code: ${response.statusCode}');
+        if (mounted) {
+          setState(() => _loading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to load messages (${response.statusCode})')),
+          );
+        }
       }
     } catch (e) {
       print('[Chat] Error loading messages: $e');
       if (mounted) {
         setState(() => _loading = false);
+        
+        // Show user-friendly error
+        String errorMessage = 'Failed to load messages';
+        if (e.toString().contains('timeout')) {
+          errorMessage = 'Connection timeout. Please check your internet.';
+        } else if (e.toString().contains('SocketException')) {
+          errorMessage = 'No internet connection';
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: _loadMessages,
+            ),
+          ),
+        );
       }
     }
   }
@@ -181,16 +253,35 @@ class _ChatScreenState extends State<ChatScreen> {
               widget.isDoctor ? 'Patient Chat' : 'Dr. ${widget.doctorName}',
               style: const TextStyle(color: Colors.white, fontSize: 16),
             ),
-            const Text(
-              'Online',
-              style: TextStyle(color: Colors.green, fontSize: 12),
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: ChatSocketService.isConnected ? Colors.green : Colors.orange,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  ChatSocketService.isConnected ? 'Online' : 'Connecting...',
+                  style: TextStyle(
+                    color: ChatSocketService.isConnected ? Colors.green : Colors.orange,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: _loadMessages,
+            onPressed: () {
+              setState(() => _loading = true);
+              _loadMessages();
+            },
           ),
         ],
       ),
