@@ -1,4 +1,13 @@
-const axios = require("axios");
+let _ai = null;
+
+async function getAI() {
+  if (_ai) return _ai;
+  // @google/genai is ESM; use dynamic import from CommonJS.
+  const mod = await import("@google/genai");
+  const { GoogleGenAI } = mod;
+  _ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  return _ai;
+}
 
 function requireGeminiKey() {
   const key = process.env.GEMINI_API_KEY;
@@ -51,7 +60,7 @@ OUTPUT JSON FORMAT FOR VALID PRESCRIPTION (FOLLOW EXACTLY):
 // POST /api/gemini/prescription
 async function analyzePrescriptionFromImage(req, res) {
   try {
-    const apiKey = requireGeminiKey();
+    requireGeminiKey();
 
     if (!req.file || !req.file.buffer) {
       return res.status(400).json({ error: "Missing image file (field name: image)" });
@@ -60,77 +69,62 @@ async function analyzePrescriptionFromImage(req, res) {
     const mimeType = req.file.mimetype || "image/jpeg";
     const base64 = req.file.buffer.toString("base64");
 
-    // Use v1beta for broad compatibility with Gemini models.
-    const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const ai = await getAI();
+    const model = process.env.GEMINI_MODEL || "gemini-flash-latest";
 
-    const body = {
+    const response = await ai.models.generateContent({
+      model,
       contents: [
         {
+          role: "user",
           parts: [
             { text: prescriptionPrompt() },
             { inlineData: { mimeType, data: base64 } },
           ],
         },
       ],
-      generationConfig: {
-        temperature: 0.2,
-      },
-    };
-
-    const resp = await axios.post(url, body, {
-      headers: { "Content-Type": "application/json" },
-      timeout: 45000,
-      validateStatus: () => true,
+      config: { temperature: 0.2 },
     });
 
-    if (resp.status < 200 || resp.status >= 300) {
-      return res.status(resp.status).json({
-        error: "Gemini request failed",
-        status: resp.status,
-        details: resp.data,
-      });
-    }
-
-    const text =
-      resp.data?.candidates?.[0]?.content?.parts?.[0]?.text ??
-      resp.data?.candidates?.[0]?.content?.parts?.[1]?.text ??
-      "";
-
-    return res.json({ text });
+    return res.json({ text: response.text || "" });
   } catch (err) {
     const code = err.statusCode || 500;
-    return res.status(code).json({ error: err.message || "Internal error" });
+    // Surface upstream error body when available (helps debugging on Flutter).
+    const details =
+      err?.response?.data ||
+      err?.error ||
+      undefined;
+
+    const msg = err?.message || "Internal error";
+    return res.status(code).json({ error: msg, details });
   }
 }
 
 // GET /api/gemini/models
 async function listModels(_req, res) {
   try {
-    const apiKey = requireGeminiKey();
-    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    requireGeminiKey();
+    const ai = await getAI();
 
-    const resp = await axios.get(url, {
-      timeout: 20000,
-      validateStatus: () => true,
-    });
-
-    if (resp.status < 200 || resp.status >= 300) {
-      return res.status(resp.status).json({
-        error: "ListModels failed",
-        status: resp.status,
-        details: resp.data,
+    const pager = await ai.models.list();
+    const models = [];
+    for await (const m of pager) {
+      models.push({
+        name: m.name,
+        supportedGenerationMethods: m.supportedGenerationMethods,
       });
+      // Keep response bounded; frontend only needs a list, not thousands.
+      if (models.length >= 200) break;
     }
 
-    const models = (resp.data?.models || []).map((m) => ({
-      name: m.name,
-      supportedGenerationMethods: m.supportedGenerationMethods,
-    }));
     return res.json({ models });
   } catch (err) {
     const code = err.statusCode || 500;
-    return res.status(code).json({ error: err.message || "Internal error" });
+    const details =
+      err?.response?.data ||
+      err?.error ||
+      undefined;
+    return res.status(code).json({ error: err.message || "Internal error", details });
   }
 }
 
