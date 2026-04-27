@@ -53,11 +53,31 @@ class PrescriptionAnalyzeService {
       }
     }
 
-    // Forward backend error in a UI-friendly way.
-    return jsonEncode({
-      "error":
-          "Analysis failed (${response.statusCode}). Please verify backend is running and GEMINI_API_KEY is set.",
-    });
+    // Forward backend error in a UI-friendly way (include backend message/details).
+    try {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final backendMsg = (data['error'] ?? data['message'] ?? '').toString();
+      final details = data['details'];
+
+      String msg = backendMsg.trim().isEmpty
+          ? 'Analysis failed (${response.statusCode}).'
+          : backendMsg.trim();
+
+      // If Gemini returned a structured error body, surface its message too.
+      final geminiMsg = (details is Map && details['error'] is Map)
+          ? (details['error']['message'] ?? '').toString()
+          : '';
+      if (geminiMsg.trim().isNotEmpty) {
+        msg = '$msg\n$geminiMsg';
+      }
+
+      return jsonEncode({"error": msg});
+    } catch (_) {
+      return jsonEncode({
+        "error":
+            "Analysis failed (${response.statusCode}). Please verify backend is running and configured.",
+      });
+    }
   }
 }
 
