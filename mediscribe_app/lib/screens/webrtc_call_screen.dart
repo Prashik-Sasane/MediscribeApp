@@ -113,8 +113,20 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
           },
         ]
       });
+      await _peerConnection.addTransceiver(
+        kind: RTCRtpMediaType.RTCRtpMediaTypeVideo,
+        init: RTCRtpTransceiverInit(
+          direction: TransceiverDirection.SendRecv,
+        ),
+      );
 
-      // Step 5: Setup peer connection handlers
+      await _peerConnection.addTransceiver(
+        kind: RTCRtpMediaType.RTCRtpMediaTypeAudio,
+        init: RTCRtpTransceiverInit(
+          direction: TransceiverDirection.SendRecv,
+        ),
+      );
+          // Step 5: Setup peer connection handlers
       _setupPeerConnection();
       
       // Step 6: Get local media
@@ -138,7 +150,6 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
     }
   }
 
-  // Force video refresh
   void _refreshVideo() {
     if (_remoteStream != null) {
       setState(() {
@@ -149,17 +160,19 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
     }
   }
   
-  // 🔥 Renegotiate if connected but no video
   Future<void> _renegotiateIfNeeded() async {
     if (_remoteStream != null) return; // Already has video
     
     print('[WebRTC] 🔥 Attempting renegotiation...');
     try {
       // Create new offer to trigger media flow
-      final offer = await _peerConnection.createOffer();
+      final offer = await _peerConnection.createOffer({
+        'offerToReceiveAudio': true,
+        'offerToReceiveVideo': true,
+      });
       await _peerConnection.setLocalDescription(offer);
-      
-      // Send renegotiation offer
+      await Future.delayed(Duration(seconds: 1));
+
       _socket.emit('call-user', {
         'to': widget.targetUserId,
         'offer': offer.toMap(),
@@ -168,9 +181,9 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
         'renegotiate': true, // Flag for renegotiation
       });
       
-      print('[WebRTC] ✅ Renegotiation offer sent');
+      print('[WebRTC] Renegotiation offer sent');
     } catch (e) {
-      print('[WebRTC] ❌ Renegotiation failed: $e');
+      print('[WebRTC] ⚠️ Renegotiation failed: $e');
     }
   }
 
@@ -187,7 +200,6 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
     );
   }
 
-  // ================= PERMISSIONS =================
   Future<bool> _requestPermissions() async {
     print('[WebRTC] Requesting permissions...');
     
@@ -210,7 +222,6 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
     return granted;
   }
 
-  // ================= LOCAL MEDIA =================
   Future<void> _getLocalMedia() async {
     try {
       print('[WebRTC] Getting local media...');
@@ -339,7 +350,6 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
               print('[WebRTC] ⚠️ Connected but NO VIDEO received!');
               print('[WebRTC] Checking if renegotiation needed...');
               // Try to renegotiate
-              _renegotiateIfNeeded();
             } else {
               print('[WebRTC] ✅ Video stream is active');
             }
@@ -459,35 +469,49 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
       }
     });
 
-    _socket.on('end-call', (_) {
+   _socket.on('end-call', (_) {
       print('[WebRTC] 🔥 Remote user ended call');
-      
-      // 🔥 CRITICAL: Always navigate back, even if cleanup fails
+
       if (mounted) {
-        // Show quick message
+        // Show message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Call ended by other user'),
             duration: Duration(seconds: 1),
           ),
         );
-        
-        // Force navigate after short delay
-        Future.delayed(const Duration(milliseconds: 500), () {
+
+        _timer?.cancel();
+
+        _localStream?.getTracks().forEach((t) => t.stop());
+        _remoteStream?.getTracks().forEach((t) => t.stop());
+
+        _localRenderer.srcObject = null;
+        _remoteRenderer.srcObject = null;
+
+        try {
+          _peerConnection.close();
+        } catch (e) {
+          print("Error closing peer: $e");
+        }
+
+        Future.delayed(const Duration(milliseconds: 300), () {
           if (mounted) {
-            print('[WebRTC] Navigating back after remote end-call');
-            Navigator.of(context).pop();
+            Navigator.of(context).popUntil((route) => route.isFirst);
           }
         });
       }
     });
   }
 
-  // ================= CALL =================
   Future<void> _startCall() async {
     print('[WebRTC] 🔥 Creating offer...');
-    final offer = await _peerConnection.createOffer();
+    final offer = await _peerConnection.createOffer({
+      'offerToReceiveAudio': true,
+      'offerToReceiveVideo': true,
+    });
     await _peerConnection.setLocalDescription(offer);
+    await Future.delayed(Duration(seconds: 1));
     print('[WebRTC] ✅ Offer created and local description set');
 
     _socket.emit('call-user', {
@@ -508,8 +532,12 @@ class _WebRTCCallScreenState extends State<WebRTCCallScreen> {
       print('[WebRTC] Remote description (offer) set successfully');
       _remoteDescSet = true;
 
-      final answer = await _peerConnection.createAnswer();
+      final answer = await _peerConnection.createAnswer({
+         'offerToReceiveAudio': true,
+         'offerToReceiveVideo': true,
+    });
       await _peerConnection.setLocalDescription(answer);
+      await Future.delayed(Duration(seconds: 1));
       print('[WebRTC] Answer created and local description set');
 
       _socket.emit('accept-call', {

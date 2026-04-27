@@ -27,57 +27,81 @@ class _ResultScreenState extends State<ResultScreen> {
   }
 
   Map<String, dynamic> _parseData(String raw) {
+    String s = raw.trim();
+
+    // Gemini sometimes returns JSON wrapped in extra text / markdown fences.
+    // Extract the outermost JSON object before decoding.
+    final start = s.indexOf('{');
+    final end = s.lastIndexOf('}');
+    if (start != -1 && end != -1 && end > start) {
+      s = s.substring(start, end + 1);
+    }
+
     try {
-      // Try parsing the JSON from Gemini
-      return Map<String, dynamic>.from(jsonDecode(raw));
-    } catch (e) {
-      // Fallback if not JSON
-      final lines = raw
-          .split('\n')
-          .map((line) => line.trim())
-          .where((line) => line.isNotEmpty)
-          .toList();
-
-      final doctorLine = lines.cast<String?>().firstWhere(
-            (line) => line!.toLowerCase().contains('dr.'),
-            orElse: () => null,
-          );
-      final patientLine = lines.cast<String?>().firstWhere(
-            (line) => line!.toLowerCase().contains('patient'),
-            orElse: () => null,
-          );
-
-      final medicines = <Map<String, String>>[];
-      for (final line in lines.take(6)) {
-        medicines.add({
-          'name': line.length > 28 ? '${line.substring(0, 28)}...' : line,
-          'dosage': 'As advised',
-          'frequency': 'Daily',
-          'instructions': 'After meal',
-        });
-      }
-
+      final decoded = jsonDecode(s);
+      return Map<String, dynamic>.from(decoded as Map);
+    } catch (_) {
+      // Fix #1: do NOT guess medicines from OCR lines.
+      // If it isn't valid JSON, treat it as an invalid/unsupported upload.
       return {
-        'doctor': doctorLine ?? 'Doctor not clearly recognized',
-        'hospital': 'Nearby Care Network',
-        'license': 'N/A',
-        'patient': patientLine ?? 'Patient details unavailable',
-        'age': '--',
-        'gender': '--',
-        'date': DateTime.now().toString().split(' ').first,
-        'medicines': medicines.isEmpty
-            ? [
-                {
-                  'name': 'No medicine extracted',
-                  'dosage': '-',
-                  'frequency': '-',
-                  'instructions': '-',
-                }
-              ]
-            : medicines,
-        'notes': lines.length > 1 ? lines.last : raw,
+        'error':
+            'Could not extract a valid prescription. Please upload a clear photo of a prescription (full page, good lighting, readable medicines).',
       };
     }
+  }
+
+  List<Map<String, dynamic>> _sanitizeMedicines(Map<String, dynamic> data) {
+    final raw = data['medicines'];
+    if (raw is! List) return const [];
+
+    final patient = (data['patient'] ?? '').toString().trim().toLowerCase();
+    final doctor = (data['doctor'] ?? '').toString().trim().toLowerCase();
+    final hospital = (data['hospital'] ?? '').toString().trim().toLowerCase();
+
+    bool looksLikeNonMedicineLine(String s) {
+      final t = s.trim().toLowerCase();
+      if (t.isEmpty) return true;
+      if (t == 'not mentioned') return true;
+
+      // Common header/metadata lines that should never be medicines.
+      const badKeywords = [
+        'patient',
+        'name',
+        'age',
+        'gender',
+        'date',
+        'dob',
+        'dr.',
+        'doctor',
+        'hospital',
+        'license',
+        'lic.',
+        'address',
+        'phone',
+        'mobile',
+        'rx',
+      ];
+      for (final k in badKeywords) {
+        if (t.contains(k)) return true;
+      }
+
+      // If Gemini mistakenly repeats patient/doctor/hospital in medicines, drop it.
+      if (patient.isNotEmpty && t == patient) return true;
+      if (doctor.isNotEmpty && t == doctor) return true;
+      if (hospital.isNotEmpty && t == hospital) return true;
+
+      return false;
+    }
+
+    final out = <Map<String, dynamic>>[];
+    for (final m in raw) {
+      if (m is! Map) continue;
+      final mm = Map<String, dynamic>.from(m as Map);
+      final name = (mm['name'] ?? '').toString();
+      if (looksLikeNonMedicineLine(name)) continue;
+      out.add(mm);
+    }
+    return out;
   }
 
   Future<void> _exportPdf(BuildContext context, Map<String, dynamic> data) async {
@@ -104,6 +128,36 @@ class _ResultScreenState extends State<ResultScreen> {
                   data['error'],
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 30),
+                PrimaryButton(
+                  text: 'Go Back',
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final sanitizedMedicines = _sanitizeMedicines(data);
+    if (sanitizedMedicines.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Processing Error')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline_rounded,
+                    color: Colors.red, size: 80),
+                const SizedBox(height: 20),
+                const Text(
+                  'Could not extract medicines from this prescription. Please upload a clearer photo (full page, good lighting, readable medicine names).',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 30),
                 PrimaryButton(
@@ -160,7 +214,7 @@ class _ResultScreenState extends State<ResultScreen> {
 
                     const SizedBox(height: 12),
 
-                    _medicineTable(data['medicines'] ?? []),
+                    _medicineTable(sanitizedMedicines),
 
                     if (data['notes'] != null && data['notes'] != 'Not mentioned') ...[
                       const SizedBox(height: 20),

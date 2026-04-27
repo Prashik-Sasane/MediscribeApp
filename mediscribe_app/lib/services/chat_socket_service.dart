@@ -36,7 +36,7 @@ class ChatSocketService {
     );
 
     _socket!.onConnect((_) {
-      print('[ChatSocket] ✅ Connected to server');
+      print('[ChatSocket]  Connected to server');
       _isConnected = true;
       _socket!.emit('register', userId);
     });

@@ -11,6 +11,7 @@ const prescriptionRoutes = require("./routes/prescriptionRoutes");
 const orderRoutes        = require("./routes/orderRoutes");
 const searchRoutes       = require("./routes/searchRoutes");
 const paymentRoutes      = require("./routes/paymentRoutes");
+const geminiRoutes       = require("./routes/geminiRoutes");
 
 const app = express();
 
@@ -80,6 +81,7 @@ app.use("/api/products",      productRoutes);
 app.use("/api/labs",          labRoutes);
 app.use("/api/search",        searchRoutes);
 app.use("/api/payment",       paymentRoutes);
+app.use("/api/gemini",        geminiRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

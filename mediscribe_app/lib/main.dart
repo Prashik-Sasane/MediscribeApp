@@ -5,6 +5,7 @@ import 'screens/main_screen.dart';
 import 'screens/login_screen.dart';
 import 'package:mediscribe_app/core/theme.dart';
 import 'package:mediscribe_app/core/app_state.dart';
+import 'screens/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,7 +33,7 @@ class MediscribeApp extends StatelessWidget {
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         themeMode: ThemeMode.system,
-        home: const LoginScreen(),
+        home: SplashScreen(),
       ),
     );
   }
