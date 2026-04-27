@@ -50,6 +50,9 @@ class _ChatScreenState extends State<ChatScreen> {
       if (appState.currentUser?.email != null) {
         print('[Chat] Initializing socket for: ${appState.currentUser!.email}');
         ChatSocketService.initialize(appState.currentUser!.email);
+        ChatSocketService.onConnectionChanged((_) {
+          if (mounted) setState(() {});
+        });
         ChatSocketService.joinChat(widget.appointmentId);
         ChatSocketService.onMessageReceived(_onNewMessage);
       } else {
@@ -107,10 +110,16 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       print('[Chat] Loading messages from API...');
       print('[Chat] Appointment ID: ${widget.appointmentId}');
+
+
+      const baseUrl = String.fromEnvironment(
+        'API_BASE_URL',
+        defaultValue: 'https://mediscribeapp.onrender.com/api',
+      );
       
       final response = await http
           .get(
-            Uri.parse('https://mediscribeapp.onrender.com/api/chat/${widget.appointmentId}'),
+            Uri.parse('$baseUrl/chat/${widget.appointmentId}'),
             headers: {'Authorization': 'Bearer ${widget.token}'},
           )
           .timeout(
@@ -196,27 +205,48 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() => _sending = true);
 
     try {
-      // Send via Socket.IO for real-time delivery
-      ChatSocketService.sendMessage(
-        appointmentId: widget.appointmentId,
-        text: text,
-        senderName: _currentUserName ?? 'User',
-        senderRole: widget.isDoctor ? 'doctor' : 'patient',
+      const baseUrl = String.fromEnvironment(
+        'API_BASE_URL',
+        defaultValue: 'https://mediscribeapp.onrender.com/api',
       );
 
-      // Optimistic UI update
+      // 1) Persist via REST (so it won't "disappear")
+      final resp = await http.post(
+        Uri.parse('$baseUrl/chat/${widget.appointmentId}'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${widget.token}',
+        },
+        body: jsonEncode({'text': text}),
+      );
+
+      if (resp.statusCode != 201) {
+        throw Exception('send failed: ${resp.statusCode} ${resp.body}');
+      }
+
+      final data = jsonDecode(resp.body) as Map<String, dynamic>;
+      final msg = Map<String, dynamic>.from(data['message'] as Map);
+
+      // 2) Update UI with the persisted message
       setState(() {
-        messages.add({
-          'id': 'temp_${DateTime.now().millisecondsSinceEpoch}',
-          'text': text,
-          'senderName': _currentUserName ?? 'User',
-          'senderRole': widget.isDoctor ? 'doctor' : 'patient',
-          'createdAt': DateTime.now().toIso8601String(),
-        });
+        messages.add(msg);
       });
 
       _messageController.clear();
       _scrollToBottom();
+
+      // 3) Broadcast via socket for realtime delivery to the other party
+      // (server will NOT save again when messageId is provided).
+      final appState = AppScope.of(context);
+      ChatSocketService.sendMessage(
+        appointmentId: widget.appointmentId,
+        text: msg['text'] ?? text,
+        senderName: msg['senderName'] ?? (_currentUserName ?? 'User'),
+        senderRole: msg['senderRole'] ?? (widget.isDoctor ? 'doctor' : 'patient'),
+        messageId: msg['id']?.toString(),
+        createdAt: msg['createdAt']?.toString(),
+        senderId: appState.currentUser?.email,
+      );
     } catch (e) {
       print('[Chat] Error sending message: $e');
       ScaffoldMessenger.of(context).showSnackBar(

@@ -89,36 +89,52 @@ async function start() {
       console.log(`💬 ${socket.userId} joined chat room: ${roomName}`);
     });
 
-    socket.on("send-message", async ({ appointmentId, text, senderName, senderRole }) => {
-      if (!appointmentId || !text) return;
+    socket.on(
+      "send-message",
+      async ({ appointmentId, text, senderName, senderRole, messageId, createdAt, senderId }) => {
+        if (!appointmentId || !text) return;
 
-      try {
-        // Store message in MongoDB
-        const message = await Message.create({
-          appointmentId,
-          senderId: socket.userId,
-          senderName: senderName || 'Unknown',
-          senderRole: senderRole || 'patient',
-          text,
-        });
-
-        console.log(`💬 Message saved: ${message._id}`);
-
-        // Broadcast to chat room
         const roomName = `chat_${appointmentId}`;
-        io.to(roomName).emit("receive-message", {
-          id: message._id.toString(),
-          text: message.text,
-          senderName: message.senderName,
-          senderRole: message.senderRole,
-          createdAt: message.createdAt,
-        });
 
-        console.log(`💬 Message broadcasted to ${roomName}`);
-      } catch (error) {
-        console.error('❌ Error saving message:', error);
+        // If the message was already persisted via REST, just broadcast it.
+        if (messageId) {
+          io.to(roomName).emit("receive-message", {
+            id: messageId,
+            text,
+            senderName: senderName || "Unknown",
+            senderRole: senderRole || "patient",
+            createdAt: createdAt || new Date().toISOString(),
+          });
+          return;
+        }
+
+        try {
+          // Store message in MongoDB
+          const message = await Message.create({
+            appointmentId,
+            senderId: socket.userId || senderId || "unknown",
+            senderName: senderName || "Unknown",
+            senderRole: senderRole || "patient",
+            text,
+          });
+
+          console.log(`💬 Message saved: ${message._id}`);
+
+          // Broadcast to chat room
+          io.to(roomName).emit("receive-message", {
+            id: message._id.toString(),
+            text: message.text,
+            senderName: message.senderName,
+            senderRole: message.senderRole,
+            createdAt: message.createdAt,
+          });
+
+          console.log(`💬 Message broadcasted to ${roomName}`);
+        } catch (error) {
+          console.error("❌ Error saving message:", error);
+        }
       }
-    });
+    );
 
     socket.on("leave-chat", ({ appointmentId }) => {
       if (!appointmentId) return;
