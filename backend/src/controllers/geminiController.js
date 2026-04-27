@@ -1,4 +1,5 @@
 let _ai = null;
+let _fileTypeFromBuffer = null;
 
 async function getAI() {
   if (_ai) return _ai;
@@ -7,6 +8,14 @@ async function getAI() {
   const { GoogleGenAI } = mod;
   _ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   return _ai;
+}
+
+async function getFileTypeFromBuffer() {
+  if (_fileTypeFromBuffer) return _fileTypeFromBuffer;
+  // file-type is ESM; use dynamic import from CommonJS.
+  const mod = await import("file-type");
+  _fileTypeFromBuffer = mod.fileTypeFromBuffer;
+  return _fileTypeFromBuffer;
 }
 
 function requireGeminiKey() {
@@ -66,7 +75,28 @@ async function analyzePrescriptionFromImage(req, res) {
       return res.status(400).json({ error: "Missing image file (field name: image)" });
     }
 
-    const mimeType = req.file.mimetype || "image/jpeg";
+    let mimeType = req.file.mimetype || "";
+    // Many clients upload as application/octet-stream; detect actual image MIME.
+    if (!mimeType || mimeType === "application/octet-stream") {
+      try {
+        const ft = await getFileTypeFromBuffer();
+        const detected = await ft(req.file.buffer);
+        if (detected?.mime) {
+          mimeType = detected.mime;
+        }
+      } catch (_) {
+        // ignore detection errors; we'll fallback below
+      }
+    }
+    if (!mimeType || mimeType === "application/octet-stream") {
+      mimeType = "image/jpeg";
+    }
+    if (!mimeType.startsWith("image/")) {
+      return res.status(400).json({
+        error: "Unsupported upload type. Please upload a JPG/PNG image.",
+        details: { mimeType },
+      });
+    }
     const base64 = req.file.buffer.toString("base64");
 
     const ai = await getAI();
